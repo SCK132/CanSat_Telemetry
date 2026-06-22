@@ -1,6 +1,6 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#include "packet.h" // Requires linking to WCPP-master/cpp/packet.h
+#include "packet.h" // Requires linking to WCPP/cpp/packet.h
 
 const char* ssid = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
