@@ -1,4 +1,4 @@
-# CanSat Ground Station
+# CanSat Ground Station Test
 
 本プロジェクトは、WASA CanSat向けに開発された、WCPP（WASA Common Packet Protocol）を用いたテレメトリ受信・コマンド送信用の地上局システムです。
 
