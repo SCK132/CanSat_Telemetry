@@ -1,0 +1,92 @@
+{
+  "entry": {
+    "La": "latitude",
+    "Lo": "longitude",
+    "Al": "gps altitude",
+
+    "Pr": "pressure",
+    "Te": "temperature",
+    "Hu": "humidity",
+    "Pa": "pressure altitude",
+
+    "Tp": "tank pressure",
+    "Np": "thrust pressure",
+    "Tt": "tank temperature",
+
+    "Ph": "phi",
+    "Si": "theta",
+
+    "Sc": "power source",
+    "Vb": "backup power voltage",
+    "Vp": "primary power voltage",
+    "Ip": "primary power current",
+    "Pp": "primary power watt",
+    "Wp": "primary power mWh",
+    "Vd": "vdd voltage",
+    "Id": "vdd current",
+    "Pd": "vdd watt",
+    "Wd": "vdd mWh",
+
+    "Cg": "charging",
+    "Vl": "lipo voltage",
+    "Il": "lipo current",
+    "Pl": "lipo watt",
+    "Wl": "lipo mWh",
+    "Dl": "lipo battery level",
+
+    "On": "power on/off",
+    "Vo": "output voltage",
+    "Io": "output current",
+    "Po": "output watt",
+    "Wo": "output mWh",
+
+    "Ut": "unix time",
+    "Ts": "timestamp"
+  },
+  "packet": {
+    "A": "tracker",
+    "B": "mission base",
+    "C": "mission advance",
+    "D": "rocket",
+    "E": "ground station",
+    "Z": "grafana"
+  },
+  "component": {
+    "0": "core",
+    "1": "lipopower",
+    "3": "moduleIF1",
+    "4": "moduleIF2",
+    "5": "moduleIF3",
+    "6": "moduleIF4",
+    "7": "moduleIF5",
+    "8": "moduleIF5",
+    "9": "moduleIF6",
+    "10": "moduleIF7",
+    "11": "loRa1",
+    "12": "loRa2",
+    "13": "loRa3",
+    "14": "loRa4",
+    "15": "loRa5",
+    "16": "loRa6",
+    "17": "loRa7",
+    "18": "loRa8",
+    "20": "logger",
+    "21": "gpsactive",
+    "22": "gpspassive",
+    "25": "pressure",
+    "30": "imu",
+    "35": "lcd",
+    "36": "ignite",
+    "37": "rcs",
+    "40": "tankpressure",
+    "45": "hx711"
+  },
+  "unit": {
+    "a": "tracker",
+    "b": "mission",
+    "c": "rocket",
+    "d": "ground station1",
+    "e": "ground station2",
+    "f": "ground station3"
+  }
+}

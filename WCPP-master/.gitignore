@@ -1,0 +1,11 @@
+/dist
+/node_modules
+__pycache__
+*.egg-info
+
+build/
+*.out
+
+.command
+
+.DS_Store

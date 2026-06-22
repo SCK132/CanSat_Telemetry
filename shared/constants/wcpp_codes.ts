@@ -1,0 +1,34 @@
+export const WCPP_CODES = {
+  UNIT: {
+    LOCAL: 0x00,
+    BROADCAST: 0xFF,
+    CONTROL: 0xFE,
+    CANSAT: 0x01
+  },
+  COMPONENT: {
+    MAIN: 0x00
+  },
+  DATA_TYPES: {
+    NULL: 0b000000,
+    STRUCT: 0b000001,
+    PACKET: 0b000010,
+    BYTES_LEN_PRE: 0b000011,
+    FLOAT_0: 0b000100,
+    FLOAT16: 0b000101,
+    FLOAT32: 0b000110,
+    FLOAT64: 0b000111
+  },
+  FLIGHT_STATE: {
+    STANDBY: 0,
+    DESCENDING: 1,
+    PARACHUTE_DEPLOYED: 2,
+    LANDED: 3
+  },
+  ACTION: {
+    DRIVE_FORWARD: 2,
+    DRIVE_BACKWARD: 3,
+    DRIVE_LEFT: 4,
+    DRIVE_RIGHT: 5,
+    DRIVE_STOP: 6
+  }
+};

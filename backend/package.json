@@ -1,0 +1,22 @@
+{
+  "name": "@cansat/backend",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "mock": "tsx src/dummy_transmitter.ts"
+  },
+  "dependencies": {
+    "@cansat/shared": "*",
+    "@influxdata/influxdb-client": "^1.35.0",
+    "cors": "^2.8.5",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/node": "^20.11.24",
+    "@types/ws": "^8.5.10",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}
