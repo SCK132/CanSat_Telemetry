@@ -35,7 +35,7 @@ function App() {
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-        
+
         {/* Left Sidebar (Status & Controls) */}
         <div className="xl:col-span-1 flex flex-col gap-6">
           <div className="glass-panel">
@@ -71,6 +71,22 @@ function App() {
                 <span className="text-slate-400">Temp (TE)</span>
                 <span className="text-indigo-300">{currentData?.temperature?.toFixed(1) ?? '---'} °C</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Accel XYZ</span>
+                <span className="text-indigo-300 text-xs">{currentData ? `${currentData.accelX.toFixed(2)}, ${currentData.accelY.toFixed(2)}, ${currentData.accelZ.toFixed(2)}` : '---'} m/s2</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Gyro XYZ</span>
+                <span className="text-indigo-300 text-xs">{currentData ? `${currentData.gyroX.toFixed(1)}, ${currentData.gyroY.toFixed(1)}, ${currentData.gyroZ.toFixed(1)}` : '---'} dps</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Heading (HD)</span>
+                <span className="text-indigo-300">{currentData?.heading?.toFixed(1) ?? '---'} deg</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-400">Validity</span>
+                <span className="text-indigo-300">IMU:{currentData?.imuValid ? 'OK' : 'NG'} MAG:{currentData?.magValid ? 'OK' : 'NG'} BARO:{currentData?.baroValid ? 'OK' : 'NG'}</span>
+              </div>
             </div>
           </div>
 
@@ -93,88 +109,88 @@ function App() {
           </div>
 
           <div className="glass-panel mt-auto">
-             <h2 className="text-xl font-semibold mb-4">Manual Rover Control</h2>
-             <div className="flex flex-col items-center gap-2">
-               <button 
-                 onClick={() => handleDrive(WCPP_CODES.ACTION.DRIVE_FORWARD)}
-                 disabled={!isConnected}
-                 className="w-16 h-16 bg-primary hover:bg-sky-500 text-slate-900 font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
-               >
-                 W
-               </button>
-               <div className="flex gap-2">
-                 <button 
-                   onClick={() => handleDrive(WCPP_CODES.ACTION.DRIVE_LEFT)}
-                   disabled={!isConnected}
-                   className="w-16 h-16 bg-primary hover:bg-sky-500 text-slate-900 font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
-                 >
-                   A
-                 </button>
-                 <button 
-                   onClick={() => handleDrive(WCPP_CODES.ACTION.DRIVE_STOP)}
-                   disabled={!isConnected}
-                   className="w-16 h-16 bg-destructive hover:bg-red-500 text-white font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center text-xs"
-                 >
-                   STOP
-                 </button>
-                 <button 
-                   onClick={() => handleDrive(WCPP_CODES.ACTION.DRIVE_RIGHT)}
-                   disabled={!isConnected}
-                   className="w-16 h-16 bg-primary hover:bg-sky-500 text-slate-900 font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
-                 >
-                   D
-                 </button>
-               </div>
-               <button 
-                 onClick={() => handleDrive(WCPP_CODES.ACTION.DRIVE_BACKWARD)}
-                 disabled={!isConnected}
-                 className="w-16 h-16 bg-primary hover:bg-sky-500 text-slate-900 font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
-               >
-                 S
-               </button>
-             </div>
+            <h2 className="text-xl font-semibold mb-4">Manual Rover Control</h2>
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={() => handleDrive(WCPP_CODES.ACTION.DRIVE_FORWARD)}
+                disabled={!isConnected}
+                className="w-16 h-16 bg-primary hover:bg-sky-500 text-slate-900 font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
+              >
+                W
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleDrive(WCPP_CODES.ACTION.DRIVE_LEFT)}
+                  disabled={!isConnected}
+                  className="w-16 h-16 bg-primary hover:bg-sky-500 text-slate-900 font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
+                >
+                  A
+                </button>
+                <button
+                  onClick={() => handleDrive(WCPP_CODES.ACTION.DRIVE_STOP)}
+                  disabled={!isConnected}
+                  className="w-16 h-16 bg-destructive hover:bg-red-500 text-white font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center text-xs"
+                >
+                  STOP
+                </button>
+                <button
+                  onClick={() => handleDrive(WCPP_CODES.ACTION.DRIVE_RIGHT)}
+                  disabled={!isConnected}
+                  className="w-16 h-16 bg-primary hover:bg-sky-500 text-slate-900 font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
+                >
+                  D
+                </button>
+              </div>
+              <button
+                onClick={() => handleDrive(WCPP_CODES.ACTION.DRIVE_BACKWARD)}
+                disabled={!isConnected}
+                className="w-16 h-16 bg-primary hover:bg-sky-500 text-slate-900 font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
+              >
+                S
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Charts and 3D and Map */}
         <div className="xl:col-span-3 flex flex-col gap-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[350px]">
-             {/* 3D Model */}
-             <div className="glass-panel flex flex-col h-full">
-               <h2 className="text-lg font-semibold mb-4">Live 3D Orientation</h2>
-               <div className="flex-1 rounded-lg overflow-hidden border border-slate-700 relative">
-                 <CanSat3D dataRef={latestDataRef} />
-               </div>
-             </div>
-             
-             {/* GNSS Map */}
-             <div className="glass-panel flex flex-col h-full">
-               <h2 className="text-lg font-semibold mb-4">Live Location Map</h2>
-               <div className="flex-1 rounded-lg overflow-hidden border border-slate-700 relative">
-                 <GNSSMap data={data} />
-               </div>
-             </div>
+            {/* 3D Model */}
+            <div className="glass-panel flex flex-col h-full">
+              <h2 className="text-lg font-semibold mb-4">Live 3D Orientation</h2>
+              <div className="flex-1 rounded-lg overflow-hidden border border-slate-700 relative">
+                <CanSat3D dataRef={latestDataRef} />
+              </div>
+            </div>
+
+            {/* GNSS Map */}
+            <div className="glass-panel flex flex-col h-full">
+              <h2 className="text-lg font-semibold mb-4">Live Location Map</h2>
+              <div className="flex-1 rounded-lg overflow-hidden border border-slate-700 relative">
+                <GNSSMap data={data} />
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[250px]">
-             {/* Altitude Profile */}
-             <div className="glass-panel flex flex-col h-full">
-               <h2 className="text-lg font-semibold mb-4">Altitude Profile</h2>
-               <div className="flex-1">
-                 <ResponsiveContainer width="100%" height="100%">
-                   <LineChart data={data}>
-                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                     <XAxis dataKey="time" stroke="#94a3b8" />
-                     <YAxis stroke="#94a3b8" />
-                     <Tooltip 
-                       contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155' }}
-                       itemStyle={{ color: '#38bdf8' }}
-                     />
-                     <Line type="monotone" dataKey="altitude" stroke="#38bdf8" strokeWidth={2} dot={false} isAnimationActive={false} />
-                   </LineChart>
-                 </ResponsiveContainer>
-               </div>
-             </div>
+            {/* Altitude Profile */}
+            <div className="glass-panel flex flex-col h-full">
+              <h2 className="text-lg font-semibold mb-4">Altitude Profile</h2>
+              <div className="flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <XAxis dataKey="time" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155' }}
+                      itemStyle={{ color: '#38bdf8' }}
+                    />
+                    <Line type="monotone" dataKey="altitude" stroke="#38bdf8" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
             {/* IMU Pitch/Roll History */}
             <div className="glass-panel flex flex-col h-full">
@@ -182,10 +198,10 @@ function App() {
               <div className="flex-1">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff" />
                     <XAxis dataKey="time" stroke="#94a3b8" />
                     <YAxis stroke="#94a3b8" />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155' }}
                       itemStyle={{ color: '#e2e8f0' }}
                     />

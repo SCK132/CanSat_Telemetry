@@ -75,10 +75,29 @@ export function parseWcppPacket(buffer: Buffer): TelemetryData | null {
       else if (name === 'LA') telemetry.latitude = value;
       else if (name === 'LO') telemetry.longitude = value;
       else if (name === 'SA') telemetry.satellites = value;
+      else if (name === 'QW') telemetry.quatW = value;
+      else if (name === 'QX') telemetry.quatX = value;
+      else if (name === 'QY') telemetry.quatY = value;
+      else if (name === 'QZ') telemetry.quatZ = value;
       else if (name === 'OX') telemetry.orientationX = value;
       else if (name === 'OY') telemetry.orientationY = value;
       else if (name === 'OZ') telemetry.orientationZ = value;
       else if (name === 'AK') telemetry.ackSeq = value;
+      else if (name === 'AX') telemetry.accelX = value;
+      else if (name === 'AY') telemetry.accelY = value;
+      else if (name === 'AZ') telemetry.accelZ = value;
+      else if (name === 'GX') telemetry.gyroX = value;
+      else if (name === 'GY') telemetry.gyroY = value;
+      else if (name === 'GZ') telemetry.gyroZ = value;
+      else if (name === 'MX') telemetry.magX = value;
+      else if (name === 'MY') telemetry.magY = value;
+      else if (name === 'MZ') telemetry.magZ = value;
+      else if (name === 'HD') telemetry.heading = value;
+      else if (name === 'IV') telemetry.imuValid = Boolean(value);
+      else if (name === 'MV') telemetry.magValid = Boolean(value);
+      else if (name === 'BV') telemetry.baroValid = Boolean(value);
+      else if (name === 'NV') telemetry.gnssValid = Boolean(value);
+      else if (name === 'FX') telemetry.gnssFix = Boolean(value);
     }
 
     // Default missing fields for safety
@@ -91,10 +110,29 @@ export function parseWcppPacket(buffer: Buffer): TelemetryData | null {
       latitude: telemetry.latitude ?? 0,
       longitude: telemetry.longitude ?? 0,
       satellites: telemetry.satellites ?? 0,
+      quatW: telemetry.quatW ?? 1,
+      quatX: telemetry.quatX ?? 0,
+      quatY: telemetry.quatY ?? 0,
+      quatZ: telemetry.quatZ ?? 0,
       orientationX: telemetry.orientationX ?? 0,
       orientationY: telemetry.orientationY ?? 0,
       orientationZ: telemetry.orientationZ ?? 0,
-      ackSeq: telemetry.ackSeq ?? 0
+      ackSeq: telemetry.ackSeq ?? 0,
+      accelX: telemetry.accelX ?? 0,
+      accelY: telemetry.accelY ?? 0,
+      accelZ: telemetry.accelZ ?? 0,
+      gyroX: telemetry.gyroX ?? 0,
+      gyroY: telemetry.gyroY ?? 0,
+      gyroZ: telemetry.gyroZ ?? 0,
+      magX: telemetry.magX ?? 0,
+      magY: telemetry.magY ?? 0,
+      magZ: telemetry.magZ ?? 0,
+      heading: telemetry.heading ?? 0,
+      imuValid: telemetry.imuValid ?? false,
+      magValid: telemetry.magValid ?? false,
+      baroValid: telemetry.baroValid ?? false,
+      gnssValid: telemetry.gnssValid ?? false,
+      gnssFix: telemetry.gnssFix ?? false
     };
   } catch (error) {
     console.error('Failed to parse WCPP packet:', error);

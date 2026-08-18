@@ -12,8 +12,35 @@ export interface TelemetryData {
   longitude: number;
   satellites: number;
 
-  // IMU (BNO055)
-  orientationX: number; // Pitch
-  orientationY: number; // Roll
-  orientationZ: number; // Yaw
+
+  // QMI8658 acceleration [m/s^2] and angular rate [dps]
+  accelX: number;
+  accelY: number;
+  accelZ: number;
+  gyroX: number;
+  gyroY: number;
+  gyroZ: number;
+
+  // MMC5603 magnetic field [uT] and heading [deg]
+  magX: number;
+  magY: number;
+  magZ: number;
+  heading: number;
+
+  // Sensor validity
+  imuValid: boolean;
+  magValid: boolean;
+  baroValid: boolean;
+  gnssValid: boolean;
+  gnssFix: boolean;
+  // Legacy orientation fields (kept for the existing 3D UI)
+  quatW: number;
+  quatX: number;
+  quatY: number;
+  quatZ: number;
+
+  // IMU - Euler angles (for graphing)
+  orientationX: number;
+  orientationY: number;
+  orientationZ: number;
 }

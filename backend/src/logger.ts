@@ -55,10 +55,29 @@ export class TelemetryLogger {
         .floatField('latitude', data.latitude)
         .floatField('longitude', data.longitude)
         .intField('satellites', data.satellites)
+        .floatField('quatW', data.quatW)
+        .floatField('quatX', data.quatX)
+        .floatField('quatY', data.quatY)
+        .floatField('quatZ', data.quatZ)
         .floatField('pitch', data.orientationX)
         .floatField('roll', data.orientationY)
         .floatField('yaw', data.orientationZ)
-        .intField('ackSeq', data.ackSeq || 0);
+        .intField('ackSeq', data.ackSeq || 0)
+        .floatField('accelX', data.accelX)
+        .floatField('accelY', data.accelY)
+        .floatField('accelZ', data.accelZ)
+        .floatField('gyroX', data.gyroX)
+        .floatField('gyroY', data.gyroY)
+        .floatField('gyroZ', data.gyroZ)
+        .floatField('magX', data.magX)
+        .floatField('magY', data.magY)
+        .floatField('magZ', data.magZ)
+        .floatField('heading', data.heading)
+        .booleanField('imuValid', data.imuValid)
+        .booleanField('magValid', data.magValid)
+        .booleanField('baroValid', data.baroValid)
+        .booleanField('gnssValid', data.gnssValid)
+        .booleanField('gnssFix', data.gnssFix);
         
       this.writeApi.writePoint(point);
     }
