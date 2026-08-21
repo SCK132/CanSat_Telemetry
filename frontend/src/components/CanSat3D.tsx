@@ -5,185 +5,87 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import * as THREE from 'three';
 import { TelemetryData } from '@cansat/shared';
 
-interface CanSat3DProps {
-  dataRef: React.MutableRefObject<TelemetryData | null>;
-  state: number;
-  attitudeValid: boolean;
-}
+interface CanSat3DProps { dataRef: React.MutableRefObject<TelemetryData | null>; state: number; attitudeValid: boolean; }
 
 function useTelemetryAttitude(dataRef: CanSat3DProps['dataRef'], attitudeValid: boolean) {
-  const groupRef = useRef<THREE.Group>(null);
-  const targetQuaternion = useRef(new THREE.Quaternion());
-
-  useFrame((_, delta) => {
-    const group = groupRef.current;
-    if (!group) return;
-    const telemetry = dataRef.current;
-    const pitch = THREE.MathUtils.degToRad(attitudeValid ? telemetry?.orientationX ?? 0 : -15);
-    const roll = THREE.MathUtils.degToRad(attitudeValid ? telemetry?.orientationY ?? 0 : 0);
-    const yaw = THREE.MathUtils.degToRad(
-      attitudeValid ? telemetry?.orientationZ ?? telemetry?.heading ?? 0 : 30,
-    );
-    targetQuaternion.current.setFromEuler(
-      new THREE.Euler(roll, yaw, -pitch, 'YXZ'),
-    );
-    group.quaternion.slerp(
-      targetQuaternion.current,
-      1 - Math.exp(-5 * delta),
-    );
-  });
-
-  return groupRef;
+  const ref = useRef<THREE.Group>(null); const target = useRef(new THREE.Quaternion());
+  useFrame((_, delta) => { if (!ref.current) return; const d = dataRef.current;
+    const pitch = THREE.MathUtils.degToRad(attitudeValid ? d?.orientationX ?? 0 : -15);
+    const roll = THREE.MathUtils.degToRad(attitudeValid ? d?.orientationY ?? 0 : 0);
+    const yaw = THREE.MathUtils.degToRad(attitudeValid ? d?.orientationZ ?? d?.heading ?? 0 : 30);
+    target.current.setFromEuler(new THREE.Euler(roll, yaw, -pitch, 'YXZ'));
+    ref.current.quaternion.slerp(target.current, 1 - Math.exp(-5 * delta));
+  }); return ref;
 }
 
 function RocketModel({ dataRef, attitudeValid }: Pick<CanSat3DProps, 'dataRef' | 'attitudeValid'>) {
-  const source = useLoader(OBJLoader, '/models/Regulus.obj');
-  const groupRef = useTelemetryAttitude(dataRef, attitudeValid);
-  const rocket = useMemo(() => {
-    const clone = source.clone(true);
-    const material = new THREE.MeshStandardMaterial({
-      color: '#d8dee5',
-      metalness: 0.38,
-      roughness: 0.48,
-    });
-    clone.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.material = material;
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
-    // OBJを表示時と同じ向きにしてから境界を求め、床面と画面中央へ揃える。
-    const oriented = new THREE.Group();
-    clone.rotation.x = -Math.PI / 2;
-    oriented.add(clone);
-    oriented.updateMatrixWorld(true);
-
-    const bounds = new THREE.Box3().setFromObject(oriented);
-    const center = bounds.getCenter(new THREE.Vector3());
-    const size = bounds.getSize(new THREE.Vector3());
-    const scale = 3.6 / Math.max(size.x, size.y, size.z);
-    oriented.scale.setScalar(scale);
-    oriented.position.set(
-      -center.x * scale,
-      -1.04 - bounds.min.y * scale,
-      -center.z * scale,
-    );
-    return oriented;
+  const source = useLoader(OBJLoader, '/models/Regulus.obj'); const groupRef = useTelemetryAttitude(dataRef, attitudeValid);
+  const rocket = useMemo(() => { const clone = source.clone(true); const material = new THREE.MeshStandardMaterial({ color: '#d8dee5', metalness: .38, roughness: .48 });
+    clone.traverse((child) => { if (child instanceof THREE.Mesh) { child.material = material; child.castShadow = true; child.receiveShadow = true; } });
+    const oriented = new THREE.Group(); clone.rotation.x = -Math.PI / 2; oriented.add(clone); oriented.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(oriented), center = bounds.getCenter(new THREE.Vector3()), size = bounds.getSize(new THREE.Vector3()), scale = 3.6 / Math.max(size.x, size.y, size.z);
+    oriented.scale.setScalar(scale); oriented.position.set(-center.x * scale, -1.04 - bounds.min.y * scale, -center.z * scale); return oriented;
   }, [source]);
+  useEffect(() => () => rocket.traverse((child) => { if (child instanceof THREE.Mesh) (Array.isArray(child.material) ? child.material : [child.material]).forEach((m) => m.dispose()); }), [rocket]);
+  return <group ref={groupRef}><primitive object={rocket} /></group>;
+}
 
-  useEffect(() => () => {
-    rocket.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        const materials = Array.isArray(child.material)
-          ? child.material
-          : [child.material];
-        materials.forEach((material) => material.dispose());
-      }
-    });
-  }, [rocket]);
+function Tire({ side }: { side: number }) {
+  return <group rotation={[0, 0, Math.PI / 2]}>
+    <mesh castShadow receiveShadow><cylinderGeometry args={[.86, .86, .42, 48]} /><meshStandardMaterial color="#df6425" roughness={.86} /></mesh>
+    <mesh position={[0, .225, 0]} castShadow><cylinderGeometry args={[.56, .56, .035, 40]} /><meshStandardMaterial color="#151a1f" metalness={.18} roughness={.63} /></mesh>
+    <mesh position={[0, -.225, 0]} castShadow><cylinderGeometry args={[.52, .52, .035, 40]} /><meshStandardMaterial color="#20252a" metalness={.12} roughness={.68} /></mesh>
+    {Array.from({ length: 18 }, (_, index) => { const angle = index / 18 * Math.PI * 2; return <group key={index} rotation={[0, angle, 0]}>
+      <mesh position={[0, .225, .79]} rotation={[0, 0, (index % 2 ? 1 : -1) * .43 * side]} castShadow><boxGeometry args={[.32, .075, .16]} /><meshStandardMaterial color="#8f3a18" roughness={1} /></mesh>
+      <mesh position={[0, -.225, .79]} rotation={[0, 0, (index % 2 ? -1 : 1) * .43 * side]} castShadow><boxGeometry args={[.32, .075, .16]} /><meshStandardMaterial color="#f07b35" roughness={.92} /></mesh>
+    </group>; })}
+    {[0, 1, 2, 3, 4, 5].map((index) => <mesh key={index} position={[.39 * Math.cos(index * Math.PI / 3), .248, .39 * Math.sin(index * Math.PI / 3)]} rotation={[Math.PI / 2, 0, 0]}><boxGeometry args={[.13, .3, .08]} /><meshStandardMaterial color="#282d32" /></mesh>)}
+    <mesh position={[0, .28, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[.13, .13, .16, 24]} /><meshStandardMaterial color="#0d1115" metalness={.35} /></mesh>
+  </group>;
+}
 
-  return (
-    <group ref={groupRef}>
-      <primitive object={rocket} />
+function Ratchet({ side, deployed }: { side: number; deployed: boolean }) {
+  const armRef = useRef<THREE.Group>(null); const wheelRef = useRef<THREE.Group>(null); const progress = useRef(deployed ? 1 : 0);
+  useFrame((_, delta) => { progress.current = THREE.MathUtils.damp(progress.current, deployed ? 1 : 0, 5, delta); const p = progress.current;
+    if (wheelRef.current) { wheelRef.current.position.set(side * (1.38 + .43 * p), -.04 - .25 * p, 0); wheelRef.current.rotation.x = side * .12 * p; }
+    if (armRef.current) { armRef.current.scale.x = .35 + .48 * p; armRef.current.rotation.z = side * (-.13 - .36 * p); }
+  });
+  return <>
+    <group position={[side * 1.27, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+      <mesh castShadow><cylinderGeometry args={[.49, .49, .13, 20]} /><meshStandardMaterial color="#181d21" metalness={.2} roughness={.7} /></mesh>
+      {Array.from({ length: 14 }, (_, i) => <mesh key={i} position={[.43 * Math.sin(i * Math.PI / 7), .085, .43 * Math.cos(i * Math.PI / 7)]} rotation={[0, i * Math.PI / 7, 0]}><boxGeometry args={[.12, .12, .16]} /><meshStandardMaterial color="#0e1317" /></mesh>)}
     </group>
-  );
-}
-
-function Wheel({ x }: { x: number }) {
-  return (
-    <group position={[x, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-      <mesh castShadow receiveShadow>
-        <cylinderGeometry args={[0.92, 0.92, 0.48, 32]} />
-        <meshStandardMaterial color="#ef772e" roughness={0.88} />
-      </mesh>
-      <mesh position={[0, 0.25, 0]} castShadow>
-        <cylinderGeometry args={[0.48, 0.48, 0.04, 32]} />
-        <meshStandardMaterial color="#171b22" metalness={0.25} roughness={0.55} />
-      </mesh>
-      {[-0.24, 0, 0.24].map((z) => (
-        <mesh key={z} position={[0, 0, z]}>
-          <torusGeometry args={[0.72, 0.055, 8, 32]} />
-          <meshStandardMaterial color="#9e461d" roughness={0.9} />
-        </mesh>
-      ))}
+    <group ref={armRef} position={[side * 1.27, -.05, 0]}>
+      <mesh position={[side * .5, 0, 0]} castShadow><boxGeometry args={[1, .16, .22]} /><meshStandardMaterial color="#252b2f" metalness={.32} roughness={.55} /></mesh>
     </group>
-  );
+    <group ref={wheelRef}><Tire side={side} /></group>
+  </>;
 }
 
-function RoverModel({
-  dataRef,
-  attitudeValid,
-  deployed,
-}: Pick<CanSat3DProps, 'dataRef' | 'attitudeValid'> & { deployed: boolean }) {
-  const groupRef = useTelemetryAttitude(dataRef, attitudeValid);
-  const wheelX = deployed ? 1.78 : 1.42;
-
-  return (
-    <group ref={groupRef} rotation={[0, 0.25, -0.08]}>
-      <Wheel x={-wheelX} />
-      <Wheel x={wheelX} />
-
-      <mesh rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.72, 0.72, 2.82, 48]} />
-        <meshPhysicalMaterial
-          color="#b8c7cf"
-          transparent
-          opacity={0.28}
-          roughness={0.25}
-          metalness={0.05}
-          transmission={0.18}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-
-      <mesh position={[0, 0.08, 0]} castShadow>
-        <boxGeometry args={[2.25, 0.18, 0.9]} />
-        <meshStandardMaterial color="#26342f" metalness={0.08} roughness={0.78} />
-      </mesh>
-      <mesh position={[0, 0.23, 0]} castShadow>
-        <boxGeometry args={[1.45, 0.12, 0.68]} />
-        <meshStandardMaterial color="#315847" metalness={0.08} roughness={0.72} />
-      </mesh>
-
-      {[-1.24, 1.24].map((x) => (
-        <mesh key={x} position={[x, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-          <cylinderGeometry args={[0.7, 0.7, 0.12, 40]} />
-          <meshStandardMaterial color="#242a31" metalness={0.16} roughness={0.7} />
-        </mesh>
-      ))}
-
-      <mesh position={[0.22, 0.37, 0]} castShadow>
-        <boxGeometry args={[0.5, 0.18, 0.45]} />
-        <meshStandardMaterial color="#d8dce0" metalness={0.25} roughness={0.48} />
-      </mesh>
-      <mesh position={[-0.5, 0.42, 0]} castShadow>
-        <boxGeometry args={[0.34, 0.22, 0.34]} />
-        <meshStandardMaterial color="#171c22" roughness={0.58} />
-      </mesh>
-    </group>
-  );
+function CircuitBoard() {
+  return <group position={[0, .2, 0]}>
+    <mesh castShadow><boxGeometry args={[2.15, .11, .88]} /><meshStandardMaterial color="#274f3d" roughness={.76} /></mesh>
+    {[-.82, -.45, -.08, .35, .76].map((x, i) => <mesh key={x} position={[x, .1, i % 2 ? -.2 : .18]} castShadow><boxGeometry args={[i === 2 ? .38 : .25, .13, i === 2 ? .35 : .22]} /><meshStandardMaterial color={i === 2 ? '#d4d7d5' : '#151c1d'} metalness={.14} roughness={.6} /></mesh>)}
+    {[-.7, -.35, 0, .35, .7].map((x) => <mesh key={x} position={[x, .075, -.39]}><boxGeometry args={[.03, .02, .62]} /><meshStandardMaterial color="#ba9f55" metalness={.45} /></mesh>)}
+  </group>;
 }
 
-function DigitalTwin({ dataRef, state, attitudeValid }: CanSat3DProps) {
-  if (state <= 2) return <RocketModel dataRef={dataRef} attitudeValid={attitudeValid} />;
-  return <RoverModel dataRef={dataRef} attitudeValid={attitudeValid} deployed={state >= 5} />;
+function RoverModel({ dataRef, attitudeValid, deployed }: Pick<CanSat3DProps, 'dataRef' | 'attitudeValid'> & { deployed: boolean }) {
+  const ref = useTelemetryAttitude(dataRef, attitudeValid);
+  return <group ref={ref} position={[0, -.02, 0]}>
+    <Ratchet side={-1} deployed={deployed} /><Ratchet side={1} deployed={deployed} />
+    <mesh rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow><cylinderGeometry args={[.7, .7, 2.65, 56, 1, true]} /><meshPhysicalMaterial color="#a9bbc2" transparent opacity={.2} roughness={.18} metalness={.04} transmission={.38} thickness={.06} side={THREE.DoubleSide} /></mesh>
+    <mesh position={[0, -.58, 0]}><boxGeometry args={[2.35, .12, .83]} /><meshStandardMaterial color="#20282a" roughness={.75} /></mesh>
+    <CircuitBoard />
+    {[-1.27, 1.27].map((x) => <mesh key={x} position={[x, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[.69, .69, .09, 48]} /><meshStandardMaterial color="#20252a" metalness={.18} roughness={.66} /></mesh>)}
+  </group>;
 }
 
-export function CanSat3D({ dataRef, state, attitudeValid }: CanSat3DProps) {
-  return (
-    <div className="digital-twin-canvas">
-      <Canvas camera={{ position: [4.8, 3.1, 4.8], fov: 42 }} shadows dpr={[1, 1.5]}>
-        <ambientLight intensity={1.1} />
-        <directionalLight position={[5, 7, 4]} intensity={2.2} castShadow />
-        <pointLight position={[-4, 2, -3]} intensity={1.2} color="#46b7ff" />
-        <Suspense fallback={null}>
-          <DigitalTwin dataRef={dataRef} state={state} attitudeValid={attitudeValid} />
-        </Suspense>
-        <ContactShadows position={[0, -1.04, 0]} opacity={0.62} scale={8} blur={2.5} far={4} />
-        <gridHelper args={[12, 24, '#263b52', '#172538']} position={[0, -1.04, 0]} />
-        <OrbitControls makeDefault enablePan={false} minDistance={3.8} maxDistance={9} />
-      </Canvas>
-    </div>
-  );
+function DigitalTwin(props: CanSat3DProps) { if (props.state <= 2) return <RocketModel dataRef={props.dataRef} attitudeValid={props.attitudeValid} />; return <RoverModel dataRef={props.dataRef} attitudeValid={props.attitudeValid} deployed={props.state >= 5} />; }
+
+export function CanSat3D(props: CanSat3DProps) {
+  return <div className="digital-twin-canvas"><Canvas camera={{ position: [4.8, 3.15, 4.8], fov: 41 }} shadows dpr={[1, 1.5]}>
+    <ambientLight intensity={1.2} /><directionalLight position={[5, 7, 4]} intensity={2.3} castShadow /><pointLight position={[-4, 2, -3]} intensity={.75} color="#8fc8e8" />
+    <Suspense fallback={null}><DigitalTwin {...props} /></Suspense><ContactShadows position={[0, -1.04, 0]} opacity={.62} scale={8} blur={2.5} far={4} /><gridHelper args={[12, 24, '#263b52', '#172538']} position={[0, -1.04, 0]} /><OrbitControls makeDefault enablePan={false} minDistance={3.8} maxDistance={9} />
+  </Canvas></div>;
 }
