@@ -208,10 +208,15 @@ function MissionControl({ connected, state, mode, batteryVoltage, failsafeReason
   send: (action: number, label: string) => void; addLog: (message: string) => void;
 }) {
   const [armed, setArmed] = useState(false);
+  const [landingConfirmed, setLandingConfirmed] = useState(false);
   const canSelect = connected && state === WCPP_CODES.MISSION_STATE.BOOT;
   const interlockClear = connected && state === WCPP_CODES.MISSION_STATE.LAUNCH_STANDBY &&
     mode === WCPP_CODES.OPERATION_MODE.MISSION;
+  const unsafeRestart = state === WCPP_CODES.MISSION_STATE.FAILSAFE && failsafeReason === 2;
+  const canResumeLanded = connected && unsafeRestart &&
+    mode === WCPP_CODES.OPERATION_MODE.MISSION;
   useEffect(() => { if (!interlockClear) setArmed(false); }, [interlockClear]);
+  useEffect(() => { if (!unsafeRestart) setLandingConfirmed(false); }, [unsafeRestart]);
 
   const disabledReason = !connected ? 'Requires telemetry link'
     : mode !== WCPP_CODES.OPERATION_MODE.MISSION ? 'Requires Mission mode'
@@ -251,11 +256,27 @@ function MissionControl({ connected, state, mode, batteryVoltage, failsafeReason
       }}>Launch / State 2</button>
     </div>
     <p className={'command-hint ' + (disabledReason === 'Ready' ? 'status-nominal' : '')}>{disabledReason === 'Ready' ? 'LAUNCH ENABLED' : 'LAUNCH DISABLED — ' + disabledReason}</p>
-    {state === WCPP_CODES.MISSION_STATE.FAILSAFE ? <div className="failsafe-control">
+    {state === WCPP_CODES.MISSION_STATE.FAILSAFE ? <div className="failsafe-control" role="group" aria-label="Failsafe recovery">
       <span>Reason <b>{FAILSAFE_REASONS[failsafeReason ?? 0] ?? 'UNKNOWN'}</b></span>
-      <button disabled={!connected || batteryVoltage === undefined || batteryVoltage < 3.5}
-        onClick={() => { send(WCPP_CODES.ACTION.CLEAR_FAILSAFE, 'CLEAR FAILSAFE'); addLog('Failsafe clear requested'); }}>Clear failsafe</button>
-      <small>Requires ≥3.5 V stable for 10 s</small>
+      {failsafeReason === 1 ? <>
+        <button disabled={!connected || batteryVoltage === undefined || batteryVoltage < 3.5}
+          onClick={() => { send(WCPP_CODES.ACTION.CLEAR_FAILSAFE, 'CLEAR FAILSAFE'); addLog('Low battery failsafe clear requested'); }}>Clear low battery</button>
+        <small>Requires ≥3.5 V stable for 10 s</small>
+      </> : null}
+      {unsafeRestart ? <>
+        <label className="landing-confirm">
+          <input type="checkbox" checked={landingConfirmed}
+            onChange={(event) => setLandingConfirmed(event.target.checked)} />
+          LANDED VISUALLY CONFIRMED
+        </label>
+        <button disabled={!canResumeLanded || !landingConfirmed} onClick={() => {
+          send(WCPP_CODES.ACTION.RESUME_LANDED, 'RESUME LANDED / STATE 4');
+          addLog('Landing confirmed; State 4 resume command transmitted');
+          setLandingConfirmed(false);
+        }}>Resume at State 4</button>
+        <small>Do not use while the vehicle is descending.</small>
+      </> : null}
+      {failsafeReason !== 1 && !unsafeRestart ? <small>No remote recovery command for this reason.</small> : null}
     </div> : null}
     <div className="command-feedback">
       <span>Command <b>{command ? '#' + String(command.id).padStart(4, '0') : '----'}</b></span>

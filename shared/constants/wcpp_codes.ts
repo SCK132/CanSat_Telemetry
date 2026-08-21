@@ -44,6 +44,7 @@ export const WCPP_CODES = {
     SELECT_DEVELOPMENT_MODE: 1,
     SELECT_MISSION_MODE: 2,
     START_LAUNCH: 3,
-    CLEAR_FAILSAFE: 4
+    CLEAR_FAILSAFE: 4,
+    RESUME_LANDED: 5
   }
 } as const;
