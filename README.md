@@ -77,3 +77,12 @@ npm run dev
 * **ソースコード**: [cansat-esp32-mock/receiver/receiver.ino](file:///c:/Users/chrik/WASA/cansat-ground-station/cansat-esp32-mock/receiver/receiver.ino)
 * **配線**: PCにUSBケーブルで直接接続するだけです。
 * **コンパイル**: 通常通り書き込みを行ってください。
+
+## Flight log storage and download
+
+The backend creates two fixed-column CSV files for every startup under `backend/logs`:
+
+- `telemetry_<timestamp>.csv`: all parsed telemetry fields, including minimal-packet-safe empty columns
+- `events_<timestamp>.csv`: ground-station startup, serial/WebSocket link changes, receiver reset reason, mission state transitions, commands, and errors
+
+The Flight Control header provides **Telemetry CSV** and **Event CSV** links. The backend serves `GET /api/logs`, `GET /api/logs/latest?type=telemetry|events`, and `GET /api/logs/<filename>` on port 8080. Download paths accept only generated log filenames.

@@ -387,7 +387,7 @@ function App() {
 
   return <main className="flight-console">
     <header className="operations-header">
-      <div className="operations-title"><span>WASA / REGULUS</span><h1>Flight Control</h1></div>
+      <div className="operations-title"><span>WASA / REGULUS</span><h1>Flight Control</h1><nav className="log-downloads" aria-label="Download logs"><a href="http://localhost:8080/api/logs/latest?type=telemetry" download>Telemetry CSV</a><a href="http://localhost:8080/api/logs/latest?type=events" download>Event CSV</a></nav></div>
       <dl className="header-telemetry">
         <div><dt>Link</dt><dd className={linkHealthy ? 'status-nominal' : current ? 'status-warning' : 'status-unknown'}><i />{linkHealthy ? 'ONLINE' : current ? 'STALE' : isConnected ? 'WAITING' : 'NO LINK'}</dd></div>
         <div><dt>RX rate</dt><dd>{packetRate.toFixed(1)} Hz</dd></div>

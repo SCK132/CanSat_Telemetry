@@ -3,94 +3,65 @@ import path from 'path';
 import { TelemetryData } from '@cansat/shared';
 import { InfluxDB, Point, WriteApi } from '@influxdata/influxdb-client';
 
+const TELEMETRY_COLUMNS: (keyof TelemetryData)[] = [
+  'serverTime','time','state','subState','operationMode','resetReason','receiverResetReason','batteryVoltage','failsafeReason',
+  'latitude','longitude','satellites','gnssValid','gnssFix','goalConfigured','goalLatitude','goalLongitude','goalDistance','motorState','separationStatus',
+  'altitude','pressure','temperature','accelX','accelY','accelZ','gyroX','gyroY','gyroZ','magX','magY','magZ','heading',
+  'imuValid','magValid','baroValid','quatW','quatX','quatY','quatZ','orientationX','orientationY','orientationZ','ackSeq',
+];
+
+function csv(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
 export class TelemetryLogger {
-  private filePath: string;
-  private stream: fs.WriteStream;
-  private isHeaderWritten = false;
-  
+  private readonly filePath: string;
+  private readonly eventPath: string;
+  private readonly stream: fs.WriteStream;
+  private readonly eventStream: fs.WriteStream;
   private writeApi: WriteApi | null = null;
 
   constructor(filename: string) {
     const logsDir = path.join(process.cwd(), 'logs');
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
-    }
-
+    fs.mkdirSync(logsDir, { recursive: true });
     this.filePath = path.join(logsDir, filename);
+    this.eventPath = path.join(logsDir, filename.replace(/^telemetry_/, 'events_'));
+    const telemetryEmpty = !fs.existsSync(this.filePath) || fs.statSync(this.filePath).size === 0;
+    const eventEmpty = !fs.existsSync(this.eventPath) || fs.statSync(this.eventPath).size === 0;
     this.stream = fs.createWriteStream(this.filePath, { flags: 'a' });
-    
-    // Initialize InfluxDB if Environment Variables exist
-    const url = process.env.INFLUX_URL;
-    const token = process.env.INFLUX_TOKEN;
-    const org = process.env.INFLUX_ORG;
-    const bucket = process.env.INFLUX_BUCKET;
+    this.eventStream = fs.createWriteStream(this.eventPath, { flags: 'a' });
+    if (telemetryEmpty) this.stream.write(`${TELEMETRY_COLUMNS.join(',')}\n`);
+    if (eventEmpty) this.eventStream.write('serverTime,category,message,details\n');
 
+    const { INFLUX_URL: url, INFLUX_TOKEN: token, INFLUX_ORG: org, INFLUX_BUCKET: bucket } = process.env;
     if (url && token && org && bucket) {
-      const influxDB = new InfluxDB({ url, token });
-      this.writeApi = influxDB.getWriteApi(org, bucket, 'ns'); // ns precision
-      console.log(`[Logger] InfluxDB WriteApi initialized for ${url} (Bucket: ${bucket})`);
-    } else {
-      console.log(`[Logger] InfluxDB disabled (Missing ENV variables). Logging to CSV only.`);
-    }
+      this.writeApi = new InfluxDB({ url, token }).getWriteApi(org, bucket, 'ns');
+      console.log(`[Logger] InfluxDB enabled for ${url} (${bucket})`);
+    } else console.log('[Logger] InfluxDB disabled (Missing ENV variables). Logging to CSV only.');
   }
 
   public log(data: TelemetryData) {
-    if (!this.isHeaderWritten) {
-      const headers = Object.keys(data).join(',');
-      this.stream.write(`${headers}\n`);
-      this.isHeaderWritten = true;
-    }
-
-    const values = Object.values(data).join(',');
-    this.stream.write(`${values}\n`);
-    
-    // Write to InfluxDB
+    this.stream.write(`${TELEMETRY_COLUMNS.map((column) => csv(data[column])).join(',')}\n`);
     if (this.writeApi) {
-      const point = new Point('telemetry')
-        .timestamp(data.serverTime ? new Date(data.serverTime) : new Date())
-        .floatField('altitude', data.altitude)
-        .floatField('pressure', data.pressure)
-        .floatField('temperature', data.temperature)
-        .intField('state', data.state)
-        .floatField('latitude', data.latitude)
-        .floatField('longitude', data.longitude)
-        .intField('satellites', data.satellites)
-        .floatField('quatW', data.quatW)
-        .floatField('quatX', data.quatX)
-        .floatField('quatY', data.quatY)
-        .floatField('quatZ', data.quatZ)
-        .floatField('pitch', data.orientationX)
-        .floatField('roll', data.orientationY)
-        .floatField('yaw', data.orientationZ)
-        .intField('ackSeq', data.ackSeq || 0)
-        .floatField('accelX', data.accelX)
-        .floatField('accelY', data.accelY)
-        .floatField('accelZ', data.accelZ)
-        .floatField('gyroX', data.gyroX)
-        .floatField('gyroY', data.gyroY)
-        .floatField('gyroZ', data.gyroZ)
-        .floatField('magX', data.magX)
-        .floatField('magY', data.magY)
-        .floatField('magZ', data.magZ)
-        .floatField('heading', data.heading)
-        .booleanField('imuValid', data.imuValid)
-        .booleanField('magValid', data.magValid)
-        .booleanField('baroValid', data.baroValid)
-        .booleanField('gnssValid', data.gnssValid)
-        .booleanField('gnssFix', data.gnssFix);
-        
+      const point = new Point('telemetry').timestamp(data.serverTime ? new Date(data.serverTime) : new Date());
+      for (const column of TELEMETRY_COLUMNS) {
+        const value = data[column];
+        if (typeof value === 'number' && Number.isFinite(value)) point.floatField(column, value);
+        else if (typeof value === 'boolean') point.booleanField(column, value);
+      }
       this.writeApi.writePoint(point);
     }
   }
 
+  public event(category: string, message: string, details: unknown = '') {
+    const serialized = typeof details === 'string' ? details : JSON.stringify(details);
+    this.eventStream.write(`${Date.now()},${csv(category)},${csv(message)},${csv(serialized)}\n`);
+  }
+
   public close() {
-    this.stream.end();
-    if (this.writeApi) {
-      this.writeApi.close().then(() => {
-        console.log('InfluxDB writeApi closed.');
-      }).catch(e => {
-        console.error('Error closing InfluxDB writeApi', e);
-      });
-    }
+    this.stream.end(); this.eventStream.end();
+    if (this.writeApi) void this.writeApi.close().catch((error) => console.error('InfluxDB close failed', error));
   }
 }

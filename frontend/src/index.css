@@ -321,3 +321,7 @@ button:disabled { cursor: not-allowed; color: #48535d !important; border-color: 
 .failsafe-control small { color: var(--text-muted); font: 500 8px var(--font-data); }
 .landing-confirm { display: flex; align-items: center; gap: 6px; color: var(--status-warning); font: 600 8px var(--font-data); }
 .landing-confirm input { accent-color: var(--status-warning); }
+
+.log-downloads { display: flex; gap: 8px; margin-top: 3px; }
+.log-downloads a { color: var(--text-secondary); font: 600 9px var(--font-data); text-decoration: none; border-bottom: 1px solid var(--border-primary); }
+.log-downloads a:hover { color: var(--status-active); border-color: var(--status-active); }

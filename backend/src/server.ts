@@ -1,11 +1,14 @@
 import { SerialPort } from 'serialport';
+import fs from 'fs';
+import path from 'path';
+import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { parseWcppPacket } from './wcpp_parser';
 import { buildWcppPacket } from './wcpp_builder';
 import { calculateCRC8 } from './wcpp_utils';
 import { TelemetryLogger } from './logger';
 
-const WS_PORT = 8080;
+const WS_PORT = Number(process.env.WS_PORT ?? 8080);
 const SERIAL_BAUD = 115200;
 const RECEIVER_DIAGNOSTIC_COMPONENT_ID = 0x7F;
 const RESET_REASON_LABELS = [
@@ -28,10 +31,32 @@ function parseReceiverResetReason(packet: Buffer): number | null {
 }
 
 // Initialize WebSocket Server for Frontend communication
-const wss = new WebSocketServer({ port: WS_PORT });
+const logsDir = path.resolve(process.cwd(), 'logs');
+function availableLogs() {
+  if (!fs.existsSync(logsDir)) return [];
+  return fs.readdirSync(logsDir).filter((name) => /^(telemetry|events)_\d+\.csv$/.test(name)).map((name) => {
+    const stat = fs.statSync(path.join(logsDir, name));
+    return { name, size: stat.size, modified: stat.mtimeMs, type: name.startsWith('telemetry_') ? 'telemetry' : 'events' };
+  }).sort((a, b) => b.modified - a.modified);
+}
+const httpServer = createServer((request, response) => {
+  const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
+  response.setHeader('Access-Control-Allow-Origin', '*');
+  if (url.pathname === '/api/logs') { response.setHeader('Content-Type', 'application/json; charset=utf-8'); response.end(JSON.stringify(availableLogs())); return; }
+  let name: string | undefined;
+  if (url.pathname === '/api/logs/latest') name = availableLogs().find((item) => item.type === (url.searchParams.get('type') ?? 'telemetry'))?.name;
+  else if (url.pathname.startsWith('/api/logs/')) name = decodeURIComponent(url.pathname.slice('/api/logs/'.length));
+  if (name && /^(telemetry|events)_\d+\.csv$/.test(name) && path.basename(name) === name) {
+    const file = path.join(logsDir, name); if (fs.existsSync(file)) { response.setHeader('Content-Type', 'text/csv; charset=utf-8'); response.setHeader('Content-Disposition', `attachment; filename="${name}"`); fs.createReadStream(file).pipe(response); return; }
+  }
+  response.statusCode = 404; response.end('Not found');
+});
+const wss = new WebSocketServer({ server: httpServer });
+httpServer.listen(WS_PORT);
 
 // Initialize Async Logger
 const logger = new TelemetryLogger(`telemetry_${Date.now()}.csv`);
+logger.event('SYSTEM', 'Ground station initialized');
 
 // Maintain list of connected clients
 const clients: Set<WebSocket> = new Set();
@@ -41,6 +66,8 @@ let activePort: SerialPort | null = null;
 const configuredPortPath = process.env.SERIAL_PORT;
 let portPath = configuredPortPath;
 let receiverResetReason: number | undefined;
+let previousMissionState: number | undefined;
+let telemetrySeen = false;
 
 async function initSerial() {
   if (!portPath) {
@@ -92,7 +119,7 @@ async function initSerial() {
       setTimeout(initSerial, 5000);
       return;
     }
-    console.log(`Serial Port ${portPath} opened successfully!`);
+    console.log(`Serial Port ${portPath} opened successfully!`); logger.event(`NETWORK`, `Serial port opened`, { port: portPath, baud: SERIAL_BAUD });
   });
 
   let rxBuffer = Buffer.alloc(0);
@@ -145,6 +172,7 @@ async function initSerial() {
           const label = RESET_REASON_LABELS[diagnosticReason] ?? 'CODE ' + diagnosticReason;
           console.warn(`[Ground receiver] reset reason: ${label} (${diagnosticReason})`);
           receiverDiagnosticLogged = true;
+          logger.event('SYSTEM', 'Ground receiver reset reason', { code: diagnosticReason, label });
         }
         continue;
       }
@@ -153,6 +181,9 @@ async function initSerial() {
       if (!telemetry) continue;
 
       telemetry.receiverResetReason = receiverResetReason;
+      if (!telemetrySeen) { telemetrySeen = true; logger.event('NETWORK', 'Telemetry link established'); }
+      if (previousMissionState !== undefined && previousMissionState !== telemetry.state) logger.event('STATE', 'Mission state changed', { from: previousMissionState, to: telemetry.state });
+      previousMissionState = telemetry.state;
       telemetry.serverTime = Date.now();
       logger.log(telemetry);
 
@@ -166,11 +197,11 @@ async function initSerial() {
   });
 
   port.on('error', (err) => {
-    console.error('Serial port error:', err.message);
+    console.error('Serial port error:', err.message); logger.event('ERROR', 'Serial port error', err.message);
   });
 
   port.on('close', () => {
-    console.warn('Serial port closed. Reconnecting in 5 seconds...');
+    console.warn('Serial port closed. Reconnecting in 5 seconds...'); logger.event('NETWORK', 'Serial port closed');
     portPath = configuredPortPath; // 明示指定があれば同じポートへ再接続
     activePort = null;
     setTimeout(initSerial, 5000);
@@ -183,12 +214,12 @@ async function initSerial() {
 initSerial();
 
 wss.on('connection', (ws) => {
-  console.log('Frontend connected via WebSocket');
+  console.log('Frontend connected via WebSocket'); logger.event('NETWORK', 'Frontend connected');
   clients.add(ws);
 
   ws.on('message', (message) => {
     try {
-      console.log('Received command from frontend:', message.toString());
+      console.log('Received command from frontend:', message.toString()); logger.event('COMMAND', 'Command received from frontend', message.toString());
       const commandJson = JSON.parse(message.toString());
 
       // Build WCPP binary from JSON command
@@ -197,9 +228,9 @@ wss.on('connection', (ws) => {
       if (activePort && activePort.isOpen) {
         activePort.write(buffer, (err) => {
           if (err) {
-            console.error('Error writing command to Serial:', err.message);
+            console.error('Error writing command to Serial:', err.message); logger.event('ERROR', 'Command serial write failed', err.message);
           } else {
-            console.log('Uplink command sent via Serial.');
+            console.log('Uplink command sent via Serial.'); logger.event('COMMAND', 'Uplink sent via serial', commandJson);
           }
         });
       } else {
@@ -211,7 +242,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    console.log('Frontend disconnected');
+    console.log('Frontend disconnected'); logger.event('NETWORK', 'Frontend disconnected');
     clients.delete(ws);
   });
 });
@@ -226,5 +257,6 @@ process.on('SIGINT', () => {
     activePort.close();
   }
   wss.close();
+  httpServer.close();
   process.exit(0);
 });
