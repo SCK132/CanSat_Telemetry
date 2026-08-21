@@ -325,3 +325,52 @@ button:disabled { cursor: not-allowed; color: #48535d !important; border-color: 
 .log-downloads { display: flex; gap: 8px; margin-top: 3px; }
 .log-downloads a { color: var(--text-secondary); font: 600 9px var(--font-data); text-decoration: none; border-bottom: 1px solid var(--border-primary); }
 .log-downloads a:hover { color: var(--status-active); border-color: var(--status-active); }
+
+.goal-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 5px 6px;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-subtle);
+}
+.goal-control > span {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: 9px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.goal-control input {
+  min-width: 0;
+  height: 29px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 1px solid #3a4650;
+  border-radius: var(--radius-control);
+  outline: 0;
+  color: var(--text-primary);
+  background: #0d141a;
+  font: 500 10px var(--font-data);
+}
+.goal-control input::placeholder { color: var(--text-disabled); opacity: 1; }
+.goal-control input:hover { border-color: #55626d; }
+.goal-control input:focus { border-color: var(--status-active); box-shadow: 0 0 0 1px color-mix(in srgb, var(--status-active) 25%, transparent); }
+.goal-control button {
+  min-width: 0;
+  min-height: 29px;
+  border: 1px solid #47535e;
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  background: #182028;
+  cursor: pointer;
+  font: 600 9px var(--font-data);
+}
+.goal-control button:hover:not(:disabled) { border-color: var(--status-active); color: var(--text-primary); background: #1b2730; }
+.goal-control small {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font: 500 8px/1.45 var(--font-data);
+}
+.goal-control small::before { content: 'VEHICLE  '; color: var(--text-disabled); }
