@@ -45,6 +45,7 @@ export const WCPP_CODES = {
     SELECT_MISSION_MODE: 2,
     START_LAUNCH: 3,
     CLEAR_FAILSAFE: 4,
-    RESUME_LANDED: 5
+    RESUME_LANDED: 5,
+    SET_GOAL_COORDINATE: 6
   }
 } as const;

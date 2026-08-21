@@ -103,6 +103,12 @@ export function parseWcppPacket(buffer: Buffer): TelemetryData | null {
       else if (name === 'BV') telemetry.baroValid = Boolean(value);
       else if (name === 'NV') telemetry.gnssValid = Boolean(value);
       else if (name === 'FX') telemetry.gnssFix = Boolean(value);
+      else if (name === 'GC') telemetry.goalConfigured = Boolean(value);
+      else if (name === 'GL') telemetry.goalLatitude = value;
+      else if (name === 'GO') telemetry.goalLongitude = value;
+      else if (name === 'GD') telemetry.goalDistance = value;
+      else if (name === 'MC') telemetry.motorState = value;
+      else if (name === 'PS') telemetry.separationStatus = value;
     }
 
     // Default missing fields for safety
@@ -142,7 +148,9 @@ export function parseWcppPacket(buffer: Buffer): TelemetryData | null {
       magValid: telemetry.magValid ?? false,
       baroValid: telemetry.baroValid ?? false,
       gnssValid: telemetry.gnssValid ?? false,
-      gnssFix: telemetry.gnssFix ?? false
+      gnssFix: telemetry.gnssFix ?? false,
+      goalConfigured: telemetry.goalConfigured, goalLatitude: telemetry.goalLatitude, goalLongitude: telemetry.goalLongitude,
+      goalDistance: telemetry.goalDistance, motorState: telemetry.motorState, separationStatus: telemetry.separationStatus
     };
   } catch (error) {
     console.error('Failed to parse WCPP packet:', error);

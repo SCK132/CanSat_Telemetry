@@ -201,15 +201,19 @@ function EventLog({ logs, filter, setFilter }: {
   </section>;
 }
 
-function MissionControl({ connected, state, mode, batteryVoltage, failsafeReason, command, send, addLog }: {
+function MissionControl({ connected, state, mode, batteryVoltage, failsafeReason, latitude, longitude, goalConfigured, goalLatitude, goalLongitude, goalDistance, command, send, addLog }: {
   connected: boolean; state: number | undefined; mode: number | undefined;
   batteryVoltage: number | undefined; failsafeReason: number | undefined;
+  latitude: number | undefined; longitude: number | undefined; goalConfigured: boolean | undefined; goalLatitude: number | undefined; goalLongitude: number | undefined; goalDistance: number | undefined;
   command: CommandRecord | null;
-  send: (action: number, label: string) => void; addLog: (message: string) => void;
+  send: (action: number, label: string, extra?: Record<string, number>) => void; addLog: (message: string) => void;
 }) {
   const [armed, setArmed] = useState(false);
   const [landingConfirmed, setLandingConfirmed] = useState(false);
+  const [goalLat, setGoalLat] = useState(''); const [goalLon, setGoalLon] = useState('');
   const canSelect = connected && state === WCPP_CODES.MISSION_STATE.BOOT;
+  const parsedGoalLat = Number(goalLat), parsedGoalLon = Number(goalLon);
+  const canSetGoal = connected && goalLat.trim() !== '' && goalLon.trim() !== '' && Number.isFinite(parsedGoalLat) && Number.isFinite(parsedGoalLon) && parsedGoalLat >= -90 && parsedGoalLat <= 90 && parsedGoalLon >= -180 && parsedGoalLon <= 180 && (state === 0 || state === 1 || state === 4);
   const interlockClear = connected && state === WCPP_CODES.MISSION_STATE.LAUNCH_STANDBY &&
     mode === WCPP_CODES.OPERATION_MODE.MISSION;
   const unsafeRestart = state === WCPP_CODES.MISSION_STATE.FAILSAFE && failsafeReason === 2;
@@ -243,6 +247,14 @@ function MissionControl({ connected, state, mode, batteryVoltage, failsafeReason
     <div className="mode-control"><span>Mode select</span>
       <button disabled={!canSelect} onClick={() => modeCommand(WCPP_CODES.ACTION.SELECT_DEVELOPMENT_MODE, 'DEVELOPMENT')}>Development</button>
       <button disabled={!canSelect} onClick={() => modeCommand(WCPP_CODES.ACTION.SELECT_MISSION_MODE, 'MISSION')}>Mission</button>
+    </div>
+    <div className="goal-control">
+      <span>Recovery target</span>
+      <input aria-label="Goal latitude" value={goalLat} onChange={(e) => setGoalLat(e.target.value)} placeholder="Latitude" />
+      <input aria-label="Goal longitude" value={goalLon} onChange={(e) => setGoalLon(e.target.value)} placeholder="Longitude" />
+      <button disabled={!canSetGoal} onClick={() => send(WCPP_CODES.ACTION.SET_GOAL_COORDINATE, 'SET GOAL', { goalLatitude: parsedGoalLat, goalLongitude: parsedGoalLon })}>Send target</button>
+      <button disabled={!connected || latitude === undefined || longitude === undefined} onClick={() => { setGoalLat(String(latitude)); setGoalLon(String(longitude)); }}>Use current GNSS</button>
+      <small>{goalConfigured ? `Stored ${goalLatitude?.toFixed(6)}, ${goalLongitude?.toFixed(6)}${goalDistance !== undefined && goalDistance >= 0 ? ` / ${goalDistance.toFixed(1)} m` : ''}` : 'No target stored'}</small>
     </div>
     <div className="protected-control">
       <button className={armed ? 'arm-button arm-button--active' : 'arm-button'}
@@ -328,14 +340,14 @@ function App() {
   const logs = useMemo(() => [...commandLogs, ...deriveLogs(data), ...INITIAL_LOGS]
     .sort((a, b) => b.at - a.at), [commandLogs, data]);
 
-  const send = (action: number, label: string) => {
+  const send = (action: number, label: string, extra: Record<string, number> = {}) => {
     const txAt = Date.now();
     const record: CommandRecord = {
       id: ++commandCounter.current, label, txAt, baselineAck: current?.ackSeq,
       status: current?.ackSeq === undefined ? 'TX ONLY' : 'WAITING ACK',
     };
     setCommand(record);
-    sendCommand({ unit: WCPP_CODES.UNIT.CANSAT, component: WCPP_CODES.COMPONENT.MAIN, action });
+    sendCommand({ unit: WCPP_CODES.UNIT.CANSAT, component: WCPP_CODES.COMPONENT.MAIN, action, ...extra });
     setCommandLogs((previous) => [{ id: 'tx-' + txAt, at: txAt, kind: 'COMMAND' as const, message: `Command #${record.id} TX: ${label}` }, ...previous].slice(0, 30));
   };
   const addLog = (message: string) => {
@@ -409,7 +421,7 @@ function App() {
       </section>
       <aside className="operations-column">
         <SensorBus current={current} ageSeconds={lastRxAge} />
-        <MissionControl connected={linkHealthy} state={current?.state} mode={current?.operationMode} batteryVoltage={current?.batteryVoltage} failsafeReason={current?.failsafeReason} command={command} send={send} addLog={addLog} />
+        <MissionControl connected={linkHealthy} state={current?.state} mode={current?.operationMode} batteryVoltage={current?.batteryVoltage} failsafeReason={current?.failsafeReason} latitude={current?.latitude} longitude={current?.longitude} goalConfigured={current?.goalConfigured} goalLatitude={current?.goalLatitude} goalLongitude={current?.goalLongitude} goalDistance={current?.goalDistance} command={command} send={send} addLog={addLog} />
       </aside>
       <section className="console-panel chart-panel altitude-chart">
         <div className="chart-heading"><PanelHeader overline="Telemetry history" title="Barometric altitude" /><div><span>Current <b>{value(current?.altitude)} m</b></span><span>Min <b>{value(altitudeValues.length ? Math.min(...altitudeValues) : undefined)} m</b></span><span>Max <b>{value(altitudeValues.length ? Math.max(...altitudeValues) : undefined)} m</b></span><span>V/S <b>{value(verticalSpeed, 2)} m/s</b></span></div></div>

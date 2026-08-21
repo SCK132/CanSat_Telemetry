@@ -32,6 +32,15 @@ export function buildWcppPacket(command: any): Buffer {
     }
   }
 
+  if (command.action === 6) {
+    const lat = Number(command.goalLatitude);
+    const lon = Number(command.goalLongitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) throw new Error(`Invalid goal coordinate`);
+    for (const [name, value] of [[`GL`, lat], [`GO`, lon]] as const) {
+      const [b0, b1] = encodeEntryType(name, 0b000111); buf[offset++] = b0; buf[offset++] = b1; buf.writeDoubleLE(value, offset); offset += 8;
+    }
+  }
+
   // Finalize size and CRC
   buf[0] = offset + 1; // Size includes size byte itself and CRC byte
   const crc = calculateCRC8(buf, offset);

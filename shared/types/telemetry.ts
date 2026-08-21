@@ -12,6 +12,12 @@ export interface TelemetryData {
   batteryVoltage?: number;      // LiPo voltage measured by CanSat
   failsafeReason?: number;       // Reason for state 7
   receiverResetReason?: number; // Ground receiver ESP32 reset reason
+  goalConfigured?: boolean;
+  goalLatitude?: number;
+  goalLongitude?: number;
+  goalDistance?: number;
+  motorState?: number;
+  separationStatus?: number;
 
   // GNSS
   latitude: number;
