@@ -7,51 +7,52 @@ const SERVER_PORT = 5000;
 const SERVER_HOST = '127.0.0.1';
 
 let time = 0;
-let altitude = 1000; // Starting altitude 1000m
-let pressure = 900;
-let temperature = 25;
-let state = WCPP_CODES.FLIGHT_STATE.STANDBY;
+let stateElapsed = 0;
+let altitude = 20;
+let pressure = 1011;
+let temperature = 24;
+let state: number = WCPP_CODES.MISSION_STATE.BOOT;
+let subState: number = WCPP_CODES.MISSION_SUB_STATE.NONE;
+let operationMode: number = WCPP_CODES.OPERATION_MODE.UNSELECTED;
 let ackSeq = 0;
-
-// GNSS Mock
-let latitude = 35.681236; // Tokyo
+let latitude = 35.681236;
 let longitude = 139.767125;
-let satellites = 8;
-
-// IMU Mock
+const satellites = 12;
 let pitch = 0;
 let roll = 0;
 let yaw = 0;
 
+function transitionTo(next: number) {
+  state = next;
+  stateElapsed = 0;
+  subState = next === WCPP_CODES.MISSION_STATE.RUNNING
+    ? WCPP_CODES.MISSION_SUB_STATE.GPS_NAVIGATION
+    : WCPP_CODES.MISSION_SUB_STATE.NONE;
+}
+
 function sendMockTelemetry() {
   const buf = Buffer.alloc(256);
-  
-  // Header (Local packet)
-  buf[1] = 0x82; // Packet ID 2, top bit 1 (Telemetry)
-  buf[2] = WCPP_CODES.UNIT.LOCAL; 
+  buf[1] = 0x82;
+  buf[2] = WCPP_CODES.UNIT.LOCAL;
   buf[3] = WCPP_CODES.UNIT.CANSAT;
-
   let offset = 4;
 
   const addFloat32Entry = (name: string, value: number) => {
-    const [b0, b1] = encodeEntryType(name, 0b000110); // float32
+    const [b0, b1] = encodeEntryType(name, 0b000110);
     buf[offset++] = b0;
     buf[offset++] = b1;
     buf.writeFloatLE(value, offset);
     offset += 4;
   };
-
   const addFloat64Entry = (name: string, value: number) => {
-    const [b0, b1] = encodeEntryType(name, 0b000111); // float64
+    const [b0, b1] = encodeEntryType(name, 0b000111);
     buf[offset++] = b0;
     buf[offset++] = b1;
     buf.writeDoubleLE(value, offset);
     offset += 8;
   };
-
   const addSmallIntEntry = (name: string, value: number) => {
-    const dataType = 0b100000 | (value & 0x1F);
-    const [b0, b1] = encodeEntryType(name, dataType);
+    const [b0, b1] = encodeEntryType(name, 0b100000 | (value & 0x1f));
     buf[offset++] = b0;
     buf[offset++] = b1;
   };
@@ -61,102 +62,65 @@ function sendMockTelemetry() {
   addFloat32Entry('PR', pressure);
   addFloat32Entry('TE', temperature);
   addSmallIntEntry('ST', state);
+  addSmallIntEntry('SS', subState);
+  addSmallIntEntry('MO', operationMode);
   addSmallIntEntry('AK', ackSeq);
-  
   addFloat64Entry('LA', latitude);
   addFloat64Entry('LO', longitude);
   addSmallIntEntry('SA', satellites);
-  
   addFloat32Entry('OX', pitch);
   addFloat32Entry('OY', roll);
   addFloat32Entry('OZ', yaw);
 
-  // Finalize
   buf[0] = offset + 1;
   buf[offset] = calculateCRC8(buf, offset);
-  const finalBuf = buf.subarray(0, offset + 1);
+  client.send(buf.subarray(0, offset + 1), SERVER_PORT, SERVER_HOST);
 
-  client.send(finalBuf, SERVER_PORT, SERVER_HOST, (err) => {
-    if (err) console.error('Mock send error:', err);
-    else console.log(`Sent telemetry: Alt=${altitude.toFixed(1)}m, State=${state}, Pitch=${pitch.toFixed(1)}`);
-  });
-
-  // Update mock values
   time += 1;
-  
-  // Wiggle IMU
+  stateElapsed += 1;
   pitch = Math.sin(time * 0.5) * 10;
   roll = Math.cos(time * 0.5) * 5;
   yaw = (yaw + 2) % 360;
 
-  if (state === WCPP_CODES.FLIGHT_STATE.STANDBY && time > 5) {
-    state = WCPP_CODES.FLIGHT_STATE.DESCENDING;
-  }
-
-  if (state === WCPP_CODES.FLIGHT_STATE.DESCENDING) {
-    altitude -= 20;
-    pressure += 2;
-    // Fast spin
-    roll += 20;
-  }
-
-  if (state === WCPP_CODES.FLIGHT_STATE.PARACHUTE_DEPLOYED) {
-    altitude -= 5; // Slower descent
-    pressure += 0.5;
-    // Slower spin
-    roll += 5;
-  }
-
-  if (altitude <= 0) {
-    altitude = 0;
-    state = WCPP_CODES.FLIGHT_STATE.LANDED;
-    pitch = 0;
-    roll = 0;
+  if (state === WCPP_CODES.MISSION_STATE.LAUNCH) {
+    altitude += 15;
+    if (stateElapsed >= 4) transitionTo(WCPP_CODES.MISSION_STATE.DEPLOYED);
+  } else if (state === WCPP_CODES.MISSION_STATE.DEPLOYED) {
+    altitude = Math.max(20, altitude - 8);
+    if (altitude <= 20 && stateElapsed >= 8) {
+      transitionTo(WCPP_CODES.MISSION_STATE.LANDED);
+    }
+  } else if (state === WCPP_CODES.MISSION_STATE.LANDED && stateElapsed >= 3) {
+    transitionTo(WCPP_CODES.MISSION_STATE.RUNNING);
+  } else if (state === WCPP_CODES.MISSION_STATE.RUNNING) {
+    latitude += 0.000001;
+    longitude += 0.000001;
   }
 }
 
-console.log('Starting dummy transmitter...');
+console.log('Starting mission dummy transmitter...');
 setInterval(sendMockTelemetry, 1000);
 
-// Listen for incoming commands (uplink)
 client.on('message', (msg) => {
-  console.log(`\n[UPLINK] Received command from ground station! Length: ${msg.length} bytes`);
-  console.log('[UPLINK] Raw Hex:', msg.toString('hex'));
-  
-  // Handle Directional Actions
-  if (msg.length >= 6) {
-    // Basic mock parser (Header 4 bytes + Entry Header 2 bytes)
-    // Extract the action value (very simplified for mock!)
-    const actionVal = msg[5] & 0x1F;
-    
-    // In a real scenario, the command packet would contain a seq_number.
-    // For this mock, we just increment our ackSeq to show we received a command.
-    ackSeq++;
-    
-    state = WCPP_CODES.FLIGHT_STATE.LANDED;
-    
-    switch (actionVal) {
-      case WCPP_CODES.ACTION.DRIVE_FORWARD:
-        console.log('=> Received DRIVE_FORWARD! Moving North...');
-        latitude += 0.0001;
-        break;
-      case WCPP_CODES.ACTION.DRIVE_BACKWARD:
-        console.log('=> Received DRIVE_BACKWARD! Moving South...');
-        latitude -= 0.0001;
-        break;
-      case WCPP_CODES.ACTION.DRIVE_LEFT:
-        console.log('=> Received DRIVE_LEFT! Moving West...');
-        longitude -= 0.0001;
-        break;
-      case WCPP_CODES.ACTION.DRIVE_RIGHT:
-        console.log('=> Received DRIVE_RIGHT! Moving East...');
-        longitude += 0.0001;
-        break;
-      case WCPP_CODES.ACTION.DRIVE_STOP:
-        console.log('=> Received DRIVE_STOP! Halting rover.');
-        break;
-      default:
-        console.log(`=> Received unknown action: ${actionVal}`);
-    }
+  if (msg.length < 6) return;
+  const action = msg[5] & 0x1f;
+  ackSeq++;
+
+  if (action === WCPP_CODES.ACTION.SELECT_DEVELOPMENT_MODE &&
+      state === WCPP_CODES.MISSION_STATE.BOOT) {
+    operationMode = WCPP_CODES.OPERATION_MODE.DEVELOPMENT;
+    console.log('=> DEVELOPMENT mode selected');
+  } else if (action === WCPP_CODES.ACTION.SELECT_MISSION_MODE &&
+             state === WCPP_CODES.MISSION_STATE.BOOT) {
+    operationMode = WCPP_CODES.OPERATION_MODE.MISSION;
+    transitionTo(WCPP_CODES.MISSION_STATE.LAUNCH_STANDBY);
+    console.log('=> MISSION mode selected');
+  } else if (action === WCPP_CODES.ACTION.START_LAUNCH &&
+             operationMode === WCPP_CODES.OPERATION_MODE.MISSION &&
+             state === WCPP_CODES.MISSION_STATE.LAUNCH_STANDBY) {
+    transitionTo(WCPP_CODES.MISSION_STATE.LAUNCH);
+    console.log('=> LAUNCH accepted');
+  } else {
+    console.log(`=> Rejected action ${action} in state ${state}`);
   }
 });

@@ -2,21 +2,35 @@
 
 本プロジェクトは、WASA CanSat向けに開発された、WCPP（WASA Common Packet Protocol）を用いたテレメトリ受信・コマンド送信用の地上局システムです。
 
+従来のWi-Fi経由のUDP通信から、長距離伝送に適した **ESP-NOW** および **USBシリアル通信** を用いた通信構成に移行されています。
+
+---
+
+## システム構成
+
+```mermaid
+graph LR
+    SubGraph1[CanSat子機 (Transmitter)] -->|ESP-NOW (Broadcast)| SubGraph2[地上局親機 (Receiver)]
+    SubGraph2 -->|USBシリアル (115200 bps)| SubGraph3[PC バックエンド (Node.js)]
+    SubGraph3 -->|WebSocket (ws://localhost:8080)| SubGraph4[フロントエンド (React)]
+```
+
 ---
 
 ## 主な機能
 - **WCPPバイナリ完全対応**: Node.jsの `Buffer` を用いたリトルエンディアン処理と、厳格なCCITT CRC-8計算によるパケットのデコード・エンコードを実装済み。
-- **リアルタイム3D可視化**: BNO055（9軸センサ）のPitch/Roll/Yawデータを受け取り、`@react-three/fiber` を用いて機体の姿勢を3Dでリアルタイム描画。
+- **ESP-NOW & シリアル連携**: CanSat（子機）と地上局（親機）は長距離無線通信「ESP-NOW」で通信し、親機とPC間はUSBシリアルケーブルを通じて通信を行います。
+- **シリアル自動認識 & 自動復旧**: バックエンドが接続中のUSBシリアルポート（COMやUSB等）を自動検出し、通信が途切れた際も自動で再接続を試みます。
+- **リアルタイム3D可視化**: CanSatのPitch/Roll/Yawを反映し、状態0〜2ではRegulusロケット、状態3以降ではCanSatモデルを表示します。状態5以降は車輪展開状態へ切り替わります。
 - **GNSSモニタリング**: 緯度・経度・捕捉衛星数をダッシュボードに表示。
-- **WASD 手動操縦コントロール**: ブラウザ上のUIから、W/A/S/Dキー操作感覚で「前進・後退・左右旋回・停止」のコマンドをUDP経由でCanSatへ送信可能。
-- **ESP32 モック送信機**: 実際のESP32などのマイコンにそのまま書き込めるC++の通信シミュレーションコードを同梱（`cansat-esp32-mock`）。
+- **ミッションコマンド**: 状態0で開発／ミッションモードを選択し、ミッションモードの状態1からLAUNCHコマンドを送信できます。モーター操作は仕様確定まで無効です。
 
 ---
 
 ## 技術スタック
 - **Monorepo**: npm workspaces を使用し、フロントエンド・バックエンド・共有設定を1つのリポジトリで管理。
 - **Frontend**: React 18, Vite 8, Tailwind CSS, Recharts (グラフ), `@react-three/fiber` & `@react-three/drei` (3D描画)
-- **Backend**: Node.js, `ws` (WebSockets), `dgram` (UDP)
+- **Backend**: Node.js, `ws` (WebSockets), `serialport` (USB Serial)
 - **Language**: TypeScript
 
 ---
@@ -29,24 +43,37 @@
 npm install
 ```
 
-### 2. システムの起動
-以下のコマンドで、バックエンド（UDP受信＆WebSocket配信）とフロントエンド（React/Vite）を同時に立ち上げます。
+### 2. 親機（Receiver）の接続
+地上局用の親機ESP32（`cansat-esp32-mock/receiver/`を書き込み済み）をUSBケーブルでPCに接続します。
+
+### 3. システムの起動
+以下のコマンドで、バックエンド（シリアル受信＆WebSocket配信）とフロントエンド（React/Vite）を同時に立ち上げます。
 ```bash
 npm run dev
 ```
-起動後、ブラウザで `http://localhost:5173` にアクセスしてください。
-
-### 3. ダミー送信機（シミュレーター）の起動
-CanSat実機の代わりに、ダミーのセンサーデータ（高度低下や機体の回転など）を送信するモックサーバーを起動できます。別のターミナルを開いて以下を実行してください。
-```bash
-npm run mock --workspace=backend
-```
-UI上の3Dモデルが動き出し、グラフがリアルタイムに更新されます。また、ダッシュボードの「W・A・S・D」ボタンを押すと、このモックサーバーがコマンドを受信したログがターミナルに出力されます。
+起動後、自動でUSBシリアルポートが検出され、接続されます。
+ブラウザで `http://localhost:5173` にアクセスしてダッシュボードを開いてください。
 
 ---
 
-## 実機（ESP32等）を使ったテスト
-本番に近いテストを行うためのArduinoスケッチが `cansat-esp32-mock/` に用意されています。
-1. `cansat-esp32-mock/main.ino` をArduino IDEやPlatformIOで開きます。
-2. SSID、パスワード、およびPCのローカルIPアドレス（`gs_ip`）をネットワーク環境に合わせて変更します。
-3. ESP32に書き込むと、Node.jsバックエンドに対してUDPパケットが送信され始めます。
+## 実機（ESP32等）を使ったセットアップ
+
+本構成では2台のESP32モジュールを使用します。
+
+### 1. 子機（CanSat搭載用：Transmitter）
+* **ソースコード**: [cansat-esp32-mock/transmitter/transmitter.ino](file:///c:/Users/chrik/WASA/cansat-ground-station/cansat-esp32-mock/transmitter/transmitter.ino)
+* **接続センサー**: `BNO055`
+* **配線**:
+  * SCL -> **GPIO 22**
+  * SDA -> **GPIO 21**
+  * VIN -> **3.3V**
+  * GND -> **GND**
+* **依存ライブラリ**: Arduino IDE等で以下をインストールしてください。
+  * `Adafruit BNO055`
+  * `Adafruit Unified Sensor`
+* **コンパイル**: `transmitter.ino` と同じフォルダに、`WCPP/cpp/` 以下のすべてのファイル（`packet.h`, `Packet.cpp`, `float16.h`, `float16.cpp`, `cppcrc.h`）をコピーしてコンパイルします。
+
+### 2. 親機（地上局PC接続用：Receiver）
+* **ソースコード**: [cansat-esp32-mock/receiver/receiver.ino](file:///c:/Users/chrik/WASA/cansat-ground-station/cansat-esp32-mock/receiver/receiver.ino)
+* **配線**: PCにUSBケーブルで直接接続するだけです。
+* **コンパイル**: 通常通り書き込みを行ってください。

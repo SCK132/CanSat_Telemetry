@@ -10,6 +10,7 @@
     "@cansat/shared": "*",
     "@influxdata/influxdb-client": "^1.35.0",
     "cors": "^2.8.5",
+    "serialport": "^13.0.0",
     "ws": "^8.16.0"
   },
   "devDependencies": {

@@ -72,6 +72,11 @@ export function parseWcppPacket(buffer: Buffer): TelemetryData | null {
       else if (name === 'PR') telemetry.pressure = value;
       else if (name === 'TE') telemetry.temperature = value;
       else if (name === 'ST') telemetry.state = value;
+      else if (name === 'SS') telemetry.subState = value;
+      else if (name === 'MO') telemetry.operationMode = value;
+      else if (name === 'RS') telemetry.resetReason = value;
+      else if (name === 'BT') telemetry.batteryVoltage = value;
+      else if (name === 'FR') telemetry.failsafeReason = value;
       else if (name === 'LA') telemetry.latitude = value;
       else if (name === 'LO') telemetry.longitude = value;
       else if (name === 'SA') telemetry.satellites = value;
@@ -107,6 +112,11 @@ export function parseWcppPacket(buffer: Buffer): TelemetryData | null {
       pressure: telemetry.pressure ?? 0,
       temperature: telemetry.temperature ?? 0,
       state: telemetry.state ?? 0,
+      subState: telemetry.subState ?? 0,
+      operationMode: telemetry.operationMode ?? 0,
+      resetReason: telemetry.resetReason ?? 0,
+      batteryVoltage: telemetry.batteryVoltage,
+      failsafeReason: telemetry.failsafeReason,
       latitude: telemetry.latitude ?? 0,
       longitude: telemetry.longitude ?? 0,
       satellites: telemetry.satellites ?? 0,
@@ -117,7 +127,7 @@ export function parseWcppPacket(buffer: Buffer): TelemetryData | null {
       orientationX: telemetry.orientationX ?? 0,
       orientationY: telemetry.orientationY ?? 0,
       orientationZ: telemetry.orientationZ ?? 0,
-      ackSeq: telemetry.ackSeq ?? 0,
+      ackSeq: telemetry.ackSeq,
       accelX: telemetry.accelX ?? 0,
       accelY: telemetry.accelY ?? 0,
       accelZ: telemetry.accelZ ?? 0,

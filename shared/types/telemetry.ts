@@ -5,8 +5,14 @@ export interface TelemetryData {
   altitude: number;   // Meters
   pressure: number;   // hPa
   temperature: number;// Celsius
-  state: number;      // Flight phase state machine
-  
+  state: number;         // Mission state 0-7
+  subState: number;      // Running sub-state 5a-5c
+  operationMode: number; // Unselected / development / mission
+  resetReason: number;          // CanSat ESP32 reset reason
+  batteryVoltage?: number;      // LiPo voltage measured by CanSat
+  failsafeReason?: number;       // Reason for state 7
+  receiverResetReason?: number; // Ground receiver ESP32 reset reason
+
   // GNSS
   latitude: number;
   longitude: number;

@@ -1,20 +1,7 @@
-import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { useEffect, useMemo } from 'react';
+import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
-import { TelemetryData } from '@cansat/shared';
-
-// Fix for default Leaflet icon not showing in React apps
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
-    iconAnchor: [12, 41]
-});
-
-L.Marker.prototype.options.icon = DefaultIcon;
+import { type TelemetryData } from '@cansat/shared';
 
 interface GNSSMapProps {
   data: TelemetryData[];
@@ -23,35 +10,55 @@ interface GNSSMapProps {
 function MapUpdater({ center }: { center: [number, number] }) {
   const map = useMap();
   useEffect(() => {
-    map.flyTo(center, map.getZoom());
+    map.flyTo(center, map.getZoom(), { duration: 0.5 });
   }, [center, map]);
   return null;
 }
 
 export function GNSSMap({ data }: GNSSMapProps) {
-  // Get latest coordinates or default to Noshiro testing ground roughly
-  const latestData = data.length > 0 ? data[data.length - 1] : null;
-  const position: [number, number] = latestData && latestData.latitude !== 0 && latestData.longitude !== 0
-    ? [latestData.latitude, latestData.longitude]
-    : [40.211, 140.032]; // Default testing ground
-
-  return (
-    <div className="w-full h-full relative bg-slate-900/50 rounded-lg overflow-hidden border border-slate-700">
-      <MapContainer center={position} zoom={18} style={{ height: '100%', width: '100%' }}>
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <Marker position={position}>
-          <Popup>
-            CanSat Location <br />
-            Lat: {position[0].toFixed(6)} <br />
-            Lon: {position[1].toFixed(6)} <br />
-            Satellites: {latestData?.satellites ?? 0}
-          </Popup>
-        </Marker>
-        <MapUpdater center={position} />
-      </MapContainer>
-    </div>
+  const latest = data.at(-1);
+  const currentFix = latest?.gnssFix && latest.latitude !== 0 && latest.longitude !== 0
+    ? latest
+    : undefined;
+  const lastFix = [...data].reverse().find((item) =>
+    item.gnssFix && item.latitude !== 0 && item.longitude !== 0);
+  const shown = currentFix ?? lastFix;
+  const latitude = shown?.latitude ?? 40.211;
+  const longitude = shown?.longitude ?? 140.032;
+  const center = useMemo<[number, number]>(
+    () => [latitude, longitude],
+    [latitude, longitude],
   );
+  const status = currentFix ? 'FIX VALID' : lastFix ? 'LAST KNOWN POSITION' : 'NO FIX';
+
+  return <div className="gnss-map">
+    <div className={'gnss-map-status ' + (currentFix
+      ? 'gnss-map-status--fix'
+      : lastFix ? 'gnss-map-status--last' : '')}>{status}</div>
+    <MapContainer center={center} zoom={18}>
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      {shown ? <CircleMarker
+        center={center}
+        radius={currentFix ? 7 : 6}
+        pathOptions={{
+          color: currentFix ? '#45d6a1' : '#f2b84b',
+          fillColor: currentFix ? '#45d6a1' : '#f2b84b',
+          fillOpacity: currentFix ? 0.8 : 0.25,
+          opacity: currentFix ? 1 : 0.65,
+          dashArray: currentFix ? undefined : '4 3',
+        }}
+      >
+        <Popup>
+          {currentFix ? 'Current CanSat position' : 'Last known position'}<br />
+          Lat: {center[0].toFixed(6)}<br />
+          Lon: {center[1].toFixed(6)}<br />
+          Satellites: {shown.satellites}
+        </Popup>
+      </CircleMarker> : null}
+      <MapUpdater center={center} />
+    </MapContainer>
+  </div>;
 }
