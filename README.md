@@ -89,3 +89,6 @@ The Flight Control header provides **Telemetry CSV** and **Event CSV** links. Th
 ## Manual phase recovery
 
 Mission Control exposes guarded recovery controls only in valid states. `Confirm deployed / State 3` is available in Mission Mode at State 2. `Confirm landed / State 4` is available in Mission Mode at State 2/3 and in Development Mode at State 0 for ground testing. A visual/safety checkbox is required before transmission because State 4 starts the 10 second motor separation sequence immediately.
+### Ground receiver GNSS target
+
+The backend distinguishes the receiver board GNSS diagnostic from vehicle telemetry and exposes receiver latitude, longitude, satellites, UART status, fix status, and age to the frontend. `Use ground GNSS` is enabled only for a fresh receiver fix (age at most 3 seconds); it fills the recovery target fields without using the CanSat position. Press `Send target` separately to transmit and persist the coordinate on the vehicle.

@@ -4,7 +4,7 @@ import { TelemetryData } from '@cansat/shared';
 import { InfluxDB, Point, WriteApi } from '@influxdata/influxdb-client';
 
 const TELEMETRY_COLUMNS: (keyof TelemetryData)[] = [
-  'serverTime','time','state','subState','operationMode','resetReason','receiverResetReason','batteryVoltage','failsafeReason',
+  'serverTime','time','state','subState','operationMode','resetReason','receiverResetReason','receiverLatitude','receiverLongitude','receiverSatellites','receiverGnssValid','receiverGnssFix','receiverGnssAge','batteryVoltage','failsafeReason',
   'latitude','longitude','satellites','gnssValid','gnssFix','goalConfigured','goalLatitude','goalLongitude','goalDistance','motorState','separationStatus',
   'altitude','pressure','temperature','accelX','accelY','accelZ','gyroX','gyroY','gyroZ','magX','magY','magZ','heading',
   'imuValid','magValid','baroValid','quatW','quatX','quatY','quatZ','orientationX','orientationY','orientationZ','ackSeq',

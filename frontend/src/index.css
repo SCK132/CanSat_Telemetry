@@ -373,7 +373,8 @@ button:disabled { cursor: not-allowed; color: #48535d !important; border-color: 
   color: var(--text-muted);
   font: 500 8px/1.45 var(--font-data);
 }
-.goal-control small::before { content: 'VEHICLE  '; color: var(--text-disabled); }
+.goal-control small:not(.ground-gnss-status)::before { content: 'VEHICLE  '; color: var(--text-disabled); }
+.goal-control .ground-gnss-status { color: var(--status-warning); }
 .phase-recovery-control {
   display: grid;
   grid-template-columns: 1fr;

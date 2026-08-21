@@ -5,7 +5,7 @@ import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { parseWcppPacket } from './wcpp_parser';
 import { buildWcppPacket } from './wcpp_builder';
-import { calculateCRC8 } from './wcpp_utils';
+import { calculateCRC8, decodeEntryType } from './wcpp_utils';
 import { TelemetryLogger } from './logger';
 
 const WS_PORT = Number(process.env.WS_PORT ?? 8080);
@@ -30,6 +30,23 @@ function parseReceiverResetReason(packet: Buffer): number | null {
   return (dataType & 0x20) !== 0 ? dataType & 0x1F : null;
 }
 
+
+type ReceiverGnss = { latitude: number; longitude: number; satellites: number; valid: boolean; fix: boolean; receivedAt: number };
+function parseReceiverGnss(packet: Buffer): ReceiverGnss | null {
+  if (packet.length < 5 || packet[2] !== 0x7E || (packet[1] & 0x80) === 0 || packet[0] !== packet.length || calculateCRC8(packet, packet.length - 1) !== packet.at(-1)) return null;
+  let offset = 4; const values: Record<string, number> = {};
+  while (offset < packet.length - 1) {
+    if (offset + 2 > packet.length - 1) return null;
+    const { name, dataType } = decodeEntryType(packet[offset++], packet[offset++]);
+    let value: number;
+    if (dataType === 0b000111) { if (offset + 8 > packet.length - 1) return null; value = packet.readDoubleLE(offset); offset += 8; }
+    else if ((dataType & 0b100000) !== 0) value = dataType & 0x1F;
+    else if ((dataType & 0b110000) === 0b010000) { const bytes = (dataType & 7) + 1; if (offset + bytes > packet.length - 1) return null; value = 0; for (let i = 0; i < bytes; i++) value += packet[offset++] * 2 ** (8 * i); }
+    else return null;
+    values[name] = value;
+  }
+  return { latitude: values.RL ?? 0, longitude: values.RO ?? 0, satellites: values.RA ?? 0, valid: Boolean(values.RV), fix: Boolean(values.RF), receivedAt: Date.now() };
+}
 // Initialize WebSocket Server for Frontend communication
 const logsDir = path.resolve(process.cwd(), 'logs');
 function availableLogs() {
@@ -68,6 +85,8 @@ let portPath = configuredPortPath;
 let receiverResetReason: number | undefined;
 let previousMissionState: number | undefined;
 let telemetrySeen = false;
+let receiverGnss: ReceiverGnss | undefined;
+let previousReceiverFix = false;
 
 async function initSerial() {
   if (!portPath) {
@@ -177,10 +196,23 @@ async function initSerial() {
         continue;
       }
 
+      const receiverPosition = parseReceiverGnss(packet);
+      if (receiverPosition) {
+        receiverGnss = receiverPosition;
+        if (receiverPosition.fix !== previousReceiverFix) logger.event('GNSS', receiverPosition.fix ? 'Ground receiver GNSS fix acquired' : 'Ground receiver GNSS fix lost', { satellites: receiverPosition.satellites });
+        previousReceiverFix = receiverPosition.fix;
+        continue;
+      }
       const telemetry = parseWcppPacket(packet);
       if (!telemetry) continue;
 
       telemetry.receiverResetReason = receiverResetReason;
+      telemetry.receiverLatitude = receiverGnss?.latitude;
+      telemetry.receiverLongitude = receiverGnss?.longitude;
+      telemetry.receiverSatellites = receiverGnss?.satellites;
+      telemetry.receiverGnssValid = receiverGnss?.valid;
+      telemetry.receiverGnssFix = receiverGnss?.fix;
+      telemetry.receiverGnssAge = receiverGnss ? (Date.now() - receiverGnss.receivedAt) / 1000 : undefined;
       if (!telemetrySeen) { telemetrySeen = true; logger.event('NETWORK', 'Telemetry link established'); }
       if (previousMissionState !== undefined && previousMissionState !== telemetry.state) logger.event('STATE', 'Mission state changed', { from: previousMissionState, to: telemetry.state });
       previousMissionState = telemetry.state;
