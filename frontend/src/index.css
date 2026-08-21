@@ -374,3 +374,20 @@ button:disabled { cursor: not-allowed; color: #48535d !important; border-color: 
   font: 500 8px/1.45 var(--font-data);
 }
 .goal-control small::before { content: 'VEHICLE  '; color: var(--text-disabled); }
+.phase-recovery-control {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+  margin-top: 7px;
+  padding: 7px;
+  border: 1px solid #5f4a28;
+  background: #18150f;
+}
+.phase-recovery-control > span { color: var(--status-warning); font: 600 9px var(--font-data); letter-spacing: .04em; text-transform: uppercase; }
+.phase-recovery-control label { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font: 600 8px/1.4 var(--font-data); }
+.phase-recovery-control input { width: 13px; height: 13px; margin: 0; accent-color: var(--status-warning); }
+.phase-recovery-control button { min-height: 29px; border: 1px solid #75613b; border-radius: var(--radius-control); color: #e6c379; background: #272013; font: 600 9px var(--font-data); cursor: pointer; }
+.phase-recovery-control button:hover:not(:disabled) { border-color: var(--status-warning); color: #ffe1a0; background: #302718; }
+.phase-recovery-control .landed-recovery { border-color: #713841; color: #ffacb3; background: #28171a; }
+.phase-recovery-control .landed-recovery:hover:not(:disabled) { border-color: var(--status-critical); color: #ffd0d4; background: #321b1f; }
+.phase-recovery-control small { color: var(--text-muted); font: 500 8px/1.4 var(--font-data); }

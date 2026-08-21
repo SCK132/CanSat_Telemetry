@@ -86,3 +86,6 @@ The backend creates two fixed-column CSV files for every startup under `backend/
 - `events_<timestamp>.csv`: ground-station startup, serial/WebSocket link changes, receiver reset reason, mission state transitions, commands, and errors
 
 The Flight Control header provides **Telemetry CSV** and **Event CSV** links. The backend serves `GET /api/logs`, `GET /api/logs/latest?type=telemetry|events`, and `GET /api/logs/<filename>` on port 8080. Download paths accept only generated log filenames.
+## Manual phase recovery
+
+Mission Control exposes guarded recovery controls only in valid states. `Confirm deployed / State 3` is available in Mission Mode at State 2. `Confirm landed / State 4` is available in Mission Mode at State 2/3 and in Development Mode at State 0 for ground testing. A visual/safety checkbox is required before transmission because State 4 starts the 10 second motor separation sequence immediately.

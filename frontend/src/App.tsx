@@ -211,7 +211,10 @@ function MissionControl({ connected, state, mode, batteryVoltage, failsafeReason
   const [armed, setArmed] = useState(false);
   const [landingConfirmed, setLandingConfirmed] = useState(false);
   const [goalLat, setGoalLat] = useState(''); const [goalLon, setGoalLon] = useState('');
+  const [phaseOverrideConfirmed, setPhaseOverrideConfirmed] = useState(false);
   const canSelect = connected && state === WCPP_CODES.MISSION_STATE.BOOT;
+  const canConfirmDeployed = connected && mode === WCPP_CODES.OPERATION_MODE.MISSION && state === WCPP_CODES.MISSION_STATE.LAUNCH;
+  const canConfirmLanded = connected && ((mode === WCPP_CODES.OPERATION_MODE.MISSION && (state === WCPP_CODES.MISSION_STATE.LAUNCH || state === WCPP_CODES.MISSION_STATE.DEPLOYED)) || (mode === WCPP_CODES.OPERATION_MODE.DEVELOPMENT && state === WCPP_CODES.MISSION_STATE.BOOT));
   const parsedGoalLat = Number(goalLat), parsedGoalLon = Number(goalLon);
   const canSetGoal = connected && goalLat.trim() !== '' && goalLon.trim() !== '' && Number.isFinite(parsedGoalLat) && Number.isFinite(parsedGoalLon) && parsedGoalLat >= -90 && parsedGoalLat <= 90 && parsedGoalLon >= -180 && parsedGoalLon <= 180 && (state === 0 || state === 1 || state === 4);
   const interlockClear = connected && state === WCPP_CODES.MISSION_STATE.LAUNCH_STANDBY &&
@@ -221,6 +224,7 @@ function MissionControl({ connected, state, mode, batteryVoltage, failsafeReason
     mode === WCPP_CODES.OPERATION_MODE.MISSION;
   useEffect(() => { if (!interlockClear) setArmed(false); }, [interlockClear]);
   useEffect(() => { if (!unsafeRestart) setLandingConfirmed(false); }, [unsafeRestart]);
+  useEffect(() => { setPhaseOverrideConfirmed(false); }, [state, mode]);
 
   const disabledReason = !connected ? 'Requires telemetry link'
     : mode !== WCPP_CODES.OPERATION_MODE.MISSION ? 'Requires Mission mode'
@@ -248,7 +252,15 @@ function MissionControl({ connected, state, mode, batteryVoltage, failsafeReason
       <button disabled={!canSelect} onClick={() => modeCommand(WCPP_CODES.ACTION.SELECT_DEVELOPMENT_MODE, 'DEVELOPMENT')}>Development</button>
       <button disabled={!canSelect} onClick={() => modeCommand(WCPP_CODES.ACTION.SELECT_MISSION_MODE, 'MISSION')}>Mission</button>
     </div>
-    <div className="goal-control">
+    {(canConfirmDeployed || canConfirmLanded) ? <div className="phase-recovery-control">
+      <span>Manual phase recovery</span>
+      <label><input type="checkbox" checked={phaseOverrideConfirmed} onChange={(event) => setPhaseOverrideConfirmed(event.target.checked)} />
+        {mode === WCPP_CODES.OPERATION_MODE.DEVELOPMENT ? 'VEHICLE LIFTED / MOTOR AREA CLEAR' : 'VEHICLE PHASE VISUALLY CONFIRMED'}
+      </label>
+      {canConfirmDeployed ? <button disabled={!phaseOverrideConfirmed} onClick={() => { send(WCPP_CODES.ACTION.CONFIRM_DEPLOYED, 'CONFIRM DEPLOYED / STATE 3'); addLog('Manual State 3 recovery transmitted'); setPhaseOverrideConfirmed(false); }}>Confirm deployed / State 3</button> : null}
+      {canConfirmLanded ? <button className="landed-recovery" disabled={!phaseOverrideConfirmed} onClick={() => { send(WCPP_CODES.ACTION.CONFIRM_LANDED, 'CONFIRM LANDED / STATE 4'); addLog('Manual State 4 recovery transmitted'); setPhaseOverrideConfirmed(false); }}>Confirm landed / State 4</button> : null}
+      <small>{mode === WCPP_CODES.OPERATION_MODE.DEVELOPMENT ? 'Starts the 10 s separation motor test, then enters State 5.' : 'State 4 immediately starts the one-time 10 s separation sequence.'}</small>
+    </div> : null}    <div className="goal-control">
       <span>Recovery target</span>
       <input aria-label="Goal latitude" value={goalLat} onChange={(e) => setGoalLat(e.target.value)} placeholder="Latitude" />
       <input aria-label="Goal longitude" value={goalLon} onChange={(e) => setGoalLon(e.target.value)} placeholder="Longitude" />
