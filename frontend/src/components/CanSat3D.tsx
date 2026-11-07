@@ -2,10 +2,11 @@ import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { ContactShadows, OrbitControls } from '@react-three/drei';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
 import * as THREE from 'three';
 import { TelemetryData } from '@cansat/shared';
 
-interface CanSat3DProps { dataRef: React.MutableRefObject<TelemetryData | null>; state: number; attitudeValid: boolean; }
+interface CanSat3DProps { dataRef: React.MutableRefObject<TelemetryData | null>; state: number; attitudeValid: boolean; rcMode?: boolean; linkHealthy?: boolean; rcFollowAttitude?: boolean; }
 
 function useTelemetryAttitude(dataRef: CanSat3DProps['dataRef'], attitudeValid: boolean) {
   const ref = useRef<THREE.Group>(null); const target = useRef(new THREE.Quaternion());
@@ -81,7 +82,87 @@ function RoverModel({ dataRef, attitudeValid, deployed }: Pick<CanSat3DProps, 'd
   </group>;
 }
 
-function DigitalTwin(props: CanSat3DProps) { if (props.state <= 2) return <RocketModel dataRef={props.dataRef} attitudeValid={props.attitudeValid} />; return <RoverModel dataRef={props.dataRef} attitudeValid={props.attitudeValid} deployed={props.state >= 5} />; }
+function RcWheel({ x, wheelRef }: { x: number; wheelRef: React.RefObject<THREE.Group> }) {
+  return <group position={[x, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+    <group ref={wheelRef}>
+      <mesh castShadow><cylinderGeometry args={[.79, .79, .48, 48]} /><meshStandardMaterial color="#ff8514" roughness={.76} /></mesh>
+      <mesh position={[0, -Math.sign(x) * .243, 0]}><cylinderGeometry args={[.68, .68, .02, 48]} /><meshStandardMaterial color="#e86422" roughness={.74} /></mesh>
+      <mesh position={[0, -Math.sign(x) * .26, 0]}><cylinderGeometry args={[.065, .065, .035, 16]} /><meshStandardMaterial color="#313235" metalness={.55} /></mesh>
+      {Array.from({ length: 24 }, (_, i) => <group key={i} rotation={[0, i * Math.PI / 12, 0]}>
+        <mesh position={[0, 0, .78]} rotation={[0, 0, i % 2 ? .22 : -.22]}><boxGeometry args={[.04, .44, .028]} /><meshStandardMaterial color={i % 3 ? '#ed7612' : '#ff9e26'} roughness={.85} /></mesh>
+      </group>)}
+    </group>
+  </group>;
+}
+
+function RcCadBody() {
+  const materials = useLoader(MTLLoader, '/models/regulus-rc-body.mtl');
+  const source = useLoader(OBJLoader, '/models/regulus-rc-body.obj', (loader) => {
+    const acrylic = materials.create('アクリル(クリア)');
+    // The CAD export describes acrylic by name but does not include opacity.
+    acrylic.transparent = true;
+    acrylic.opacity = .38;
+    acrylic.depthWrite = false;
+    acrylic.side = THREE.DoubleSide;
+    loader.setMaterials(materials);
+  });
+  const model = useMemo(() => {
+    const copy = source.clone(true);
+    copy.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        const surface = Array.isArray(child.material) ? child.material : [child.material];
+        const translucent = surface.some((material) => material.transparent);
+        child.castShadow = !translucent;
+        if (translucent) child.renderOrder = 1;
+      }
+    });
+    return copy;
+  }, [source]);
+  // The CAD body spans x=0..8; fit it between the existing tires and keep the axle at z=0.
+  return <primitive object={model} position={[-1.2, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={.3} />;
+}
+
+const MODEL_UP = new THREE.Vector3(0, 1, 0);
+
+function RcModel({ dataRef, rcFollowAttitude, linkHealthy }: CanSat3DProps) {
+  const body = useRef<THREE.Group>(null);
+  const pose = useMemo(() => ({
+    up: new THREE.Vector3(), target: new THREE.Quaternion(), yaw: new THREE.Quaternion(),
+  }), []);
+  const left = useRef<THREE.Group>(null);
+  const right = useRef<THREE.Group>(null);
+  useFrame((_, delta) => {
+    const data = dataRef.current;
+    if (body.current) {
+      if (!rcFollowAttitude) {
+        pose.target.identity();
+      } else if (linkHealthy && data?.operationMode === 3 && data.imuValid) {
+        // RC board mounting: -Z up; exchange the horizontal axes to match the CAD body.
+        pose.up.set(-data.accelX, -data.accelZ, -data.accelY);
+        const magnitude = pose.up.length();
+        if (magnitude >= 7.35 && magnitude <= 12.25) {
+          pose.target.setFromUnitVectors(pose.up.multiplyScalar(1 / magnitude), MODEL_UP);
+          if (data.magValid && Number.isFinite(data.heading)) {
+            pose.yaw.setFromAxisAngle(MODEL_UP, -THREE.MathUtils.degToRad(data.heading));
+            pose.target.premultiply(pose.yaw);
+          }
+        }
+      }
+      body.current.quaternion.slerp(pose.target, 1 - Math.exp(-6 * delta));
+    }
+    if (!linkHealthy || data?.operationMode !== 3 || data.state === 7) return;
+    // Motor state reports commanded output; this is an illustrative speed, not measured RPM.
+    const step = 7 * Math.min(delta, .05);
+    if (left.current && (data.motorState === 1 || data.motorState === 3)) left.current.rotation.y += step;
+    if (right.current && (data.motorState === 1 || data.motorState === 2)) right.current.rotation.y += step;
+  });
+  return <group ref={body} position={[0, -.24, 0]}>
+    <RcWheel x={-1.45} wheelRef={left} /><RcWheel x={1.45} wheelRef={right} />
+    <Suspense fallback={null}><RcCadBody /></Suspense>
+  </group>;
+}
+
+function DigitalTwin(props: CanSat3DProps) { if (props.rcMode) return <RcModel {...props} />; if (props.state <= 2) return <RocketModel dataRef={props.dataRef} attitudeValid={props.attitudeValid} />; return <RoverModel dataRef={props.dataRef} attitudeValid={props.attitudeValid} deployed={props.state >= 5} />; }
 
 export function CanSat3D(props: CanSat3DProps) {
   return <div className="digital-twin-canvas"><Canvas camera={{ position: [4.8, 3.15, 4.8], fov: 41 }} shadows dpr={[1, 1.5]}>

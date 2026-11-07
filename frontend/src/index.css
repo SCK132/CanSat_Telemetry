@@ -224,7 +224,7 @@ button:disabled { cursor: not-allowed; color: #48535d !important; border-color: 
     "attitude recovery operations"
     "altitude angular operations"
     "event event operations";
-  grid-template-rows: 282px 174px 138px;
+  grid-template-rows: minmax(282px, auto) minmax(174px, auto) minmax(138px, auto);
   gap: 7px;
   margin-top: 7px;
 }
@@ -233,7 +233,7 @@ button:disabled { cursor: not-allowed; color: #48535d !important; border-color: 
 .altitude-chart { grid-area: altitude; }
 .angular-chart { grid-area: angular; }
 .event-panel { grid-area: event; }
-.operations-column { grid-area: operations; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 7px; min-width: 0; }
+.operations-column { grid-area: operations; display: grid; grid-template-rows: auto auto; align-content: start; gap: 7px; min-width: 0; }
 .attitude-panel, .recovery-panel, .sensor-panel { height: auto; padding: 8px; }
 .section-header { min-height: 29px; padding-bottom: 5px; }
 .model-stage, .map-stage { position: relative; height: 208px; margin-top: 6px; }
@@ -300,7 +300,7 @@ button:disabled { cursor: not-allowed; color: #48535d !important; border-color: 
   .workspace-grid {
     grid-template-columns: minmax(0, 1fr) 330px;
     grid-template-areas: "attitude operations" "recovery operations" "altitude angular" "event event";
-    grid-template-rows: 282px 282px 174px 138px;
+    grid-template-rows: minmax(282px, auto) minmax(282px, auto) minmax(174px, auto) minmax(138px, auto);
   }
 }
 @media (max-width: 760px) {
@@ -392,3 +392,20 @@ button:disabled { cursor: not-allowed; color: #48535d !important; border-color: 
 .phase-recovery-control .landed-recovery { border-color: #713841; color: #ffacb3; background: #28171a; }
 .phase-recovery-control .landed-recovery:hover:not(:disabled) { border-color: var(--status-critical); color: #ffd0d4; background: #321b1f; }
 .phase-recovery-control small { color: var(--text-muted); font: 500 8px/1.4 var(--font-data); }
+.rc-enable {
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 1px solid #77efd1;
+  border-radius: 4px;
+  background: #77efd1;
+  color: #09251f;
+  font: 700 1rem system-ui, sans-serif;
+  cursor: pointer;
+}
+.rc-enable--stop { background: #ff777c; border-color: #ff777c; color: #341116; }
+.rc-enable:disabled { background: #24313b; border-color: #46545e; color: #bac5ce; cursor: not-allowed; }
+.rc-enable:focus-visible { outline: 2px solid white; outline-offset: 3px; }
+.rc-attitude-toggle { min-height: 36px; padding: 0 8px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text-secondary); font: 600 10px var(--font-data); cursor: pointer; }
+.rc-attitude-toggle[aria-pressed="true"] { color: #77efd1; }
+.rc-attitude-toggle:focus-visible { outline: 1px solid currentColor; }

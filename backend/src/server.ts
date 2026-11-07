@@ -10,6 +10,7 @@ import { TelemetryLogger } from './logger';
 
 const WS_PORT = Number(process.env.WS_PORT ?? 8080);
 const SERIAL_BAUD = 115200;
+const WEBSOCKET_HEARTBEAT_INTERVAL_MS = 15_000;
 const RECEIVER_DIAGNOSTIC_COMPONENT_ID = 0x7F;
 const RESET_REASON_LABELS = [
   'UNKNOWN', 'POWER ON', 'EXTERNAL RESET', 'SOFTWARE RESET', 'PANIC',
@@ -76,7 +77,33 @@ const logger = new TelemetryLogger(`telemetry_${Date.now()}.csv`);
 logger.event('SYSTEM', 'Ground station initialized');
 
 // Maintain list of connected clients
-const clients: Set<WebSocket> = new Set();
+type LiveWebSocket = WebSocket & { isAlive: boolean };
+const clients: Set<LiveWebSocket> = new Set();
+
+// Ping frames are answered automatically by browsers. Besides detecting dead
+// peers, this keeps otherwise-idle connections alive through common proxies and
+// Wi-Fi equipment that expire inactive TCP sessions.
+const websocketHeartbeat = setInterval(() => {
+  for (const client of clients) {
+    if (!client.isAlive) {
+      console.warn('Terminating an unresponsive frontend WebSocket');
+      logger.event('NETWORK', 'Frontend WebSocket heartbeat timed out');
+      clients.delete(client);
+      client.terminate();
+      continue;
+    }
+
+    client.isAlive = false;
+    try {
+      client.ping();
+    } catch (error) {
+      console.warn('Failed to ping frontend WebSocket', error);
+      clients.delete(client);
+      client.terminate();
+    }
+  }
+}, WEBSOCKET_HEARTBEAT_INTERVAL_MS);
+websocketHeartbeat.unref();
 
 // Active serial port instance
 let activePort: SerialPort | null = null;
@@ -245,14 +272,49 @@ async function initSerial() {
 // Start Serial Port Connection
 initSerial();
 
-wss.on('connection', (ws) => {
+let rcOwner: WebSocket | undefined;
+let rcLastCommand = 0;
+
+wss.on('connection', (socket) => {
+  const ws = socket as LiveWebSocket;
+  ws.isAlive = true;
   console.log('Frontend connected via WebSocket'); logger.event('NETWORK', 'Frontend connected');
   clients.add(ws);
 
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
+
+  // Always consume per-client errors so a connection reset cannot become an
+  // unhandled EventEmitter error and take down the backend process.
+  ws.on('error', (error) => {
+    console.warn('Frontend WebSocket error:', error.message);
+    logger.event('NETWORK', 'Frontend WebSocket error', error.message);
+  });
+
   ws.on('message', (message) => {
     try {
-      console.log('Received command from frontend:', message.toString()); logger.event('COMMAND', 'Command received from frontend', message.toString());
       const commandJson = JSON.parse(message.toString());
+      const action = commandJson.action;
+      if (Number.isInteger(action) && action >= 9 && action <= 15) {
+        const port = activePort;
+        if (!port?.isOpen || commandJson.component !== 0 || commandJson.unit !== 1) return;
+        const now = Date.now();
+        if (now - rcLastCommand >= 250) rcOwner = undefined;
+        if (action === 9) {
+          if (rcOwner && rcOwner !== ws) return;
+        } else if (rcOwner !== ws) return;
+        // Do not accumulate stale movement frames behind a blocked serial link.
+        if (port.writableLength > 0 && action !== 10) return;
+        const frame = buildWcppPacket(commandJson);
+        rcOwner = action === 10 ? undefined : ws;
+        rcLastCommand = now;
+        port.write(frame, (error) => {
+          if (error) console.warn('RC serial write failed:', error.message);
+        });
+        return;
+      }
+      console.log('Received command from frontend:', message.toString()); logger.event('COMMAND', 'Command received from frontend', message.toString());
 
       // Build WCPP binary from JSON command
       const buffer = buildWcppPacket(commandJson);
@@ -274,6 +336,14 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
+    if (rcOwner === ws) {
+      rcOwner = undefined;
+      if (activePort?.isOpen) {
+        activePort.write(buildWcppPacket({ component: 0, action: 10 }), (error) => {
+          if (error) console.warn('RC stop write failed:', error.message);
+        });
+      }
+    }
     console.log('Frontend disconnected'); logger.event('NETWORK', 'Frontend disconnected');
     clients.delete(ws);
   });
@@ -284,6 +354,7 @@ console.log(`WebSocket Server listening on ws://localhost:${WS_PORT}`);
 // Handle graceful shutdown
 process.on('SIGINT', () => {
   console.log('Shutting down...');
+  clearInterval(websocketHeartbeat);
   logger.close();
   if (activePort && activePort.isOpen) {
     activePort.close();

@@ -41,6 +41,15 @@ export function buildWcppPacket(command: any): Buffer {
     }
   }
 
+  if (command.action === 15) {
+    for (const [key, duty] of [['DL', command.left], ['DR', command.right]] as const) {
+      if (!Number.isInteger(duty) || duty < -15 || duty > 15) throw new Error('Invalid RC wheel duty');
+      const [b0, b1] = encodeEntryType(key, 0x20 | (duty + 15));
+      buf[offset++] = b0;
+      buf[offset++] = b1;
+    }
+  }
+
   // Finalize size and CRC
   buf[0] = offset + 1; // Size includes size byte itself and CRC byte
   const crc = calculateCRC8(buf, offset);

@@ -12,7 +12,7 @@ const PHASES = [
   [0, 'BOOT'], [1, 'STANDBY'], [2, 'LAUNCH'], [3, 'DEPLOY'],
   [4, 'LAND'], [5, 'RUN'], [6, 'FINISH'], [7, 'FAILSAFE'],
 ] as const;
-const MODES = ['UNSELECTED', 'DEVELOPMENT', 'MISSION'];
+const MODES = ['UNSELECTED', 'DEVELOPMENT', 'MISSION', 'RC'];
 const FAILSAFE_REASONS = ['NONE', 'LOW BATTERY', 'UNSAFE FLIGHT RESTART', 'SENSOR FAILURE'];
 const RESET_REASONS = [
   'UNKNOWN', 'POWER ON', 'EXTERNAL RESET', 'SOFTWARE RESET', 'PANIC',
@@ -61,12 +61,12 @@ function resetName(reason: number | undefined) {
   return reason === undefined ? 'NO DATA' : RESET_REASONS[reason] ?? 'CODE ' + reason;
 }
 
-function PanelHeader({ overline, title, status, statusClass = '' }: {
-  overline: string; title: string; status?: string; statusClass?: string;
+function PanelHeader({ overline, title, status, statusClass = '', action }: {
+  overline: string; title: string; status?: string; statusClass?: string; action?: React.ReactNode;
 }) {
   return <header className="section-header">
     <div><span>{overline}</span><h2>{title}</h2></div>
-    {status ? <b className={statusClass}>{status}</b> : null}
+    {action ?? (status ? <b className={statusClass}>{status}</b> : null)}
   </header>;
 }
 
@@ -314,8 +314,97 @@ function MissionControl({ connected, state, mode, batteryVoltage, failsafeReason
   </section>;
 }
 
+const websocketProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const websocketUrl = import.meta.env.VITE_WS_URL?.trim()
+  || `${websocketProtocol}//${window.location.host}/telemetry-ws`;
+
+const RC = { arm: 9, stop: 10, neutral: 14, drive: 15 };
+
+function RcJoystick({ ready, low, send }: {
+  ready: boolean; low: boolean; send: (command: unknown) => void;
+}) {
+  const [enabled, setEnabled] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const wheels = useRef({ left: 0, right: 0 });
+  const pointer = useRef<number | null>(null);
+  const transmit = (action: number) => send({ unit: 1, component: 0, action });
+  const resetStick = () => {
+    pointer.current = null;
+    wheels.current = { left: 0, right: 0 };
+    setPosition({ x: 0, y: 0 });
+  };
+  useEffect(() => {
+    if (!enabled || !ready) return;
+    const stop = () => {
+      resetStick();
+      send({ unit: 1, component: 0, action: RC.stop });
+      setEnabled(false);
+    };
+    const visibility = () => { if (document.hidden) stop(); };
+    const timer = window.setInterval(() => {
+      if (!document.hidden) send({ unit: 1, component: 0, action: RC.drive, ...wheels.current });
+    }, 75);
+    window.addEventListener('blur', stop);
+    window.addEventListener('pagehide', stop);
+    document.addEventListener('visibilitychange', visibility);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('blur', stop);
+      window.removeEventListener('pagehide', stop);
+      document.removeEventListener('visibilitychange', visibility);
+      send({ unit: 1, component: 0, action: RC.stop });
+    };
+  }, [enabled, ready, send]);
+  useEffect(() => {
+    if (!ready) { resetStick(); setEnabled(false); }
+  }, [ready]);
+
+  return <section className="console-panel" style={{ padding: 12 }}>
+    <h2>RC Joystick</h2>
+    <p id="rc-control-status" role="status">{low ? '低電圧ロック中' : !ready ? '機体との通信・電圧確認待ち' : enabled ? '操作モード：ON' : '操作モード：OFF'}</p>
+    <button className={enabled ? 'rc-enable rc-enable--stop' : 'rc-enable'} aria-describedby="rc-control-status" disabled={!ready} onClick={() => {
+      resetStick();
+      transmit(enabled ? RC.stop : RC.arm);
+      setEnabled(!enabled);
+    }}>{enabled ? '■ 停止・操作を無効化' : '▶ RC操作を有効にする'}</button>
+    <div aria-label="Forward and steering touch joystick"
+      style={{ touchAction: 'none', userSelect: 'none', margin: '12px auto', position: 'relative', width: 144, height: 144, border: '1px solid currentColor', borderRadius: '50%', display: 'grid', placeItems: 'center', opacity: enabled && ready ? 1 : 0.45 }}
+      onPointerDown={(event) => {
+        if (!enabled || !ready || pointer.current !== null || event.button !== 0) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        pointer.current = event.pointerId;
+      }}
+      onPointerMove={(event) => {
+        if (!enabled || !ready || pointer.current !== event.pointerId) return;
+        const box = event.currentTarget.getBoundingClientRect();
+        const x = event.clientX - box.left - box.width / 2;
+        const y = event.clientY - box.top - box.height / 2;
+        const scale = Math.min(1, 48 / Math.max(1, Math.hypot(x, y)));
+        setPosition({ x: x * scale, y: y * scale });
+        const axis = (v: number) => Math.sign(v) * Math.max(0, (Math.abs(v) - 7) / 41);
+        const throttle = axis(-y * scale);
+        const steering = axis(x * scale);
+        // Near straight travel the inner wheel slows without reversing.
+        // A horizontal input pivots in place, with wheels turning in opposite directions.
+        const left = throttle + steering;
+        const right = throttle - steering;
+        const peak = Math.max(1, Math.abs(left), Math.abs(right));
+        wheels.current = { left: Math.round(15 * left / peak), right: Math.round(15 * right / peak) };
+      }}
+      onPointerUp={(event) => { if (pointer.current === event.pointerId) { resetStick(); transmit(RC.neutral); } }}
+      onPointerCancel={() => { resetStick(); setEnabled(false); }}
+      onLostPointerCapture={() => {
+        if (pointer.current !== null) { resetStick(); setEnabled(false); }
+      }}>
+      <span style={{ width: 38, height: 38, borderRadius: '50%', background: 'currentColor', transform: `translate(${position.x}px, ${position.y}px)`, pointerEvents: 'none' }} />
+    </div>
+    <small>↑ 前進 · ↓ 後退 · ← / → 旋回 · 指を離すと停止</small>
+  </section>;
+}
+
 function App() {
-  const { data, isConnected, sendCommand, latestDataRef } = useTelemetry('ws://localhost:8080');
+  const [rcFollowAttitude, setRcFollowAttitude] = useState(false);
+  const { data, isConnected, sendCommand, latestDataRef } = useTelemetry(websocketUrl);
   const [now, setNow] = useState(Date.now());
   const [commandLogs, setCommandLogs] = useState<LogEntry[]>([]);
   const [logFilter, setLogFilter] = useState<LogFilter>('ALL');
@@ -400,7 +489,7 @@ function App() {
 
   return <main className="flight-console">
     <header className="operations-header">
-      <div className="operations-title"><span>WASA / REGULUS</span><h1>Flight Control</h1><nav className="log-downloads" aria-label="Download logs"><a href="http://localhost:8080/api/logs/latest?type=telemetry" download>Telemetry CSV</a><a href="http://localhost:8080/api/logs/latest?type=events" download>Event CSV</a></nav></div>
+      <div className="operations-title"><span>WASA / REGULUS</span><h1>Flight Control</h1><nav className="log-downloads" aria-label="Download logs"><a href="/api/logs/latest?type=telemetry" download>Telemetry CSV</a><a href="/api/logs/latest?type=events" download>Event CSV</a></nav></div>
       <dl className="header-telemetry">
         <div><dt>Link</dt><dd className={linkHealthy ? 'status-nominal' : current ? 'status-warning' : 'status-unknown'}><i />{linkHealthy ? 'ONLINE' : current ? 'STALE' : isConnected ? 'WAITING' : 'NO LINK'}</dd></div>
         <div><dt>RX rate</dt><dd>{packetRate.toFixed(1)} Hz</dd></div>
@@ -423,9 +512,13 @@ function App() {
 
     <section className="workspace-grid">
       <section className="console-panel attitude-panel">
-        <PanelHeader overline="Vehicle orientation" title={(current?.state ?? 0) <= 2 ? 'Regulus launch vehicle' : 'REGULUS CanSat'} status={current?.imuValid ? 'LIVE ATTITUDE' : 'REFERENCE VIEW'} statusClass={current?.imuValid ? 'status-nominal' : 'status-unknown'} />
-        <div className="model-stage"><Suspense fallback={<div className="stage-loading">Loading 3D model…</div>}><CanSat3D dataRef={latestDataRef} state={current?.state ?? 0} attitudeValid={Boolean(current?.imuValid)} /></Suspense>{!current?.imuValid ? <span className="stage-message">ATTITUDE DATA UNAVAILABLE</span> : null}</div>
-        <div className="readout-strip"><span>Pitch <b>{current?.imuValid ? value(current.orientationX) + '°' : '---'}</b></span><span>Roll <b>{current?.imuValid ? value(current.orientationY) + '°' : '---'}</b></span><span>Yaw <b>{current?.imuValid ? value(current.orientationZ) + '°' : '---'}</b></span></div>
+        <PanelHeader overline="Vehicle orientation" title={current?.operationMode === 3 ? 'REGULUS RC' : (current?.state ?? 0) <= 2 ? 'Regulus launch vehicle' : 'REGULUS CanSat'} status={current?.imuValid ? 'LIVE ATTITUDE' : 'REFERENCE VIEW'} statusClass={current?.imuValid ? 'status-nominal' : 'status-unknown'} action={current?.operationMode === 3 ? (
+          <button type="button" className="rc-attitude-toggle" aria-label="姿勢追従" aria-pressed={rcFollowAttitude} onClick={() => setRcFollowAttitude(on => !on)}>
+            IMU {rcFollowAttitude ? (linkHealthy && current.imuValid ? 'ON' : 'WAIT') : 'OFF'}
+          </button>
+        ) : undefined} />
+        <div className="model-stage"><Suspense fallback={<div className="stage-loading">Loading 3D model…</div>}><CanSat3D dataRef={latestDataRef} state={current?.state ?? 0} attitudeValid={Boolean(current?.imuValid)} rcMode={current?.operationMode === 3} linkHealthy={linkHealthy} rcFollowAttitude={rcFollowAttitude} /></Suspense>{current?.operationMode !== 3 && !current?.imuValid ? <span className="stage-message">ATTITUDE DATA UNAVAILABLE</span> : null}</div>
+        {current?.operationMode !== 3 && <div className="readout-strip"><span>Pitch <b>{current?.imuValid ? value(current.orientationX) + '°' : '---'}</b></span><span>Roll <b>{current?.imuValid ? value(current.orientationY) + '°' : '---'}</b></span><span>Yaw <b>{current?.imuValid ? value(current.orientationZ) + '°' : '---'}</b></span></div>}
       </section>
       <section className="console-panel recovery-panel">
         <PanelHeader overline="Recovery navigation" title="GNSS position" status={gnss} statusClass={!current ? 'status-unknown' : current.gnssFix ? 'status-nominal' : current.gnssValid ? 'status-warning' : 'status-critical'} />
@@ -433,8 +526,12 @@ function App() {
         <div className="fix-readout"><span>Current fix <b>{current?.gnssFix ? 'VALID' : 'NONE'}</b></span><span>Last fix <b>{lastFix ? `${value(lastFix.latitude, 6)}, ${value(lastFix.longitude, 6)}` : '---'}</b></span><span>Age <b>{lastFixAge === undefined ? '---' : lastFixAge.toFixed(1) + ' s'}</b></span></div>
       </section>
       <aside className="operations-column">
+        {current?.operationMode === 3 && <RcJoystick
+          ready={linkHealthy && current.state === 0 && (current.batteryVoltage ?? 0) > 0 && (current.batteryVoltage ?? 0) <= 5}
+          low={current.state === 7 && current.failsafeReason === 1}
+          send={sendCommand} />}
         <SensorBus current={current} ageSeconds={lastRxAge} />
-        <MissionControl connected={linkHealthy} state={current?.state} mode={current?.operationMode} batteryVoltage={current?.batteryVoltage} failsafeReason={current?.failsafeReason} receiverLatitude={current?.receiverLatitude} receiverLongitude={current?.receiverLongitude} receiverSatellites={current?.receiverSatellites} receiverGnssValid={current?.receiverGnssValid} receiverGnssFix={current?.receiverGnssFix} receiverGnssAge={current?.receiverGnssAge} goalConfigured={current?.goalConfigured} goalLatitude={current?.goalLatitude} goalLongitude={current?.goalLongitude} goalDistance={current?.goalDistance} command={command} send={send} addLog={addLog} />
+        {current?.operationMode !== 3 && <MissionControl connected={linkHealthy} state={current?.state} mode={current?.operationMode} batteryVoltage={current?.batteryVoltage} failsafeReason={current?.failsafeReason} receiverLatitude={current?.receiverLatitude} receiverLongitude={current?.receiverLongitude} receiverSatellites={current?.receiverSatellites} receiverGnssValid={current?.receiverGnssValid} receiverGnssFix={current?.receiverGnssFix} receiverGnssAge={current?.receiverGnssAge} goalConfigured={current?.goalConfigured} goalLatitude={current?.goalLatitude} goalLongitude={current?.goalLongitude} goalDistance={current?.goalDistance} command={command} send={send} addLog={addLog} />}
       </aside>
       <section className="console-panel chart-panel altitude-chart">
         <div className="chart-heading"><PanelHeader overline="Telemetry history" title="Barometric altitude" /><div><span>Current <b>{value(current?.altitude)} m</b></span><span>Min <b>{value(altitudeValues.length ? Math.min(...altitudeValues) : undefined)} m</b></span><span>Max <b>{value(altitudeValues.length ? Math.max(...altitudeValues) : undefined)} m</b></span><span>V/S <b>{value(verticalSpeed, 2)} m/s</b></span></div></div>
